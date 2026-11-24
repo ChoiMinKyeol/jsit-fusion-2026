@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>좌표면적 계산 연습기 - 고등학교 토목과 측량 실습</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Noto Sans KR', 'sans-serif'],
+                    },
+                    colors: {
+                        civil: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                            900: '#0a3651',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+        }
+        .table-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.4);
+        }
+        /* Hide number spinner */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none;
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-civil-800 via-civil-700 to-civil-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="p-3 bg-white/10 rounded-xl backdrop-blur-sm border border-white/20">
+                        <i class="fa-solid fa-draw-polygon text-2xl text-amber-300"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-amber-400 text-civil-900 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">토목과 측량 실습</span>
+                            <span class="bg-white/20 text-xs px-2.5 py-0.5 rounded-full text-slate-100">NCS 세부측량</span>
+                        </div>
+                        <h1 class="text-2xl font-bold mt-1 tracking-tight">좌표면적 계산 연습기</h1>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="loadExampleData()" class="px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-civil-900 font-bold rounded-lg shadow transition duration-150 flex items-center space-x-2 text-sm">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span>예제 불러오기</span>
+                    </button>
+                    <button onclick="resetData()" class="px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg border border-white/20 transition duration-150 text-sm flex items-center space-x-1.5">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>초기화</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full space-y-8">
+
+        <!-- Intro Banner -->
+        <div class="bg-sky-50 border border-sky-200 rounded-2xl p-4 sm:p-5 text-sky-900 flex items-start space-x-3 shadow-sm">
+            <i class="fa-solid fa-circle-info text-sky-600 text-xl mt-0.5 flex-shrink-0"></i>
+            <div class="text-sm leading-relaxed">
+                <strong class="font-semibold text-sky-950">학습 안내:</strong> 
+                본 실습기는 신발끈 공식(Shoelace Formula)을 활용하여 좌표에 의한 다각형 배면적(2A) 및 면적(A)을 산출하고, 
+                지적측량 및 세부측량 규정에 따른 <span class="underline font-bold text-sky-950">끝수 처리</span> 원칙을 단계별로 학습하도록 제작되었습니다.
+            </div>
+        </div>
+
+        <!-- Upper Grid: Data Input & Canvas Visualization -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            <!-- Left Side: Point Entry & Rounding Unit Option (5 cols) -->
+            <div class="lg:col-span-5 space-y-6">
+                <!-- Point Table Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                            <i class="fa-solid fa-list-ol text-civil-600"></i>
+                            <span>1. 점 좌표 입력</span>
+                        </h2>
+                        <span class="text-xs text-slate-500 font-normal">최소 3개 점 필요</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 text-xs uppercase border-b border-slate-200">
+                                    <th class="py-2.5 px-3 text-center w-16">점 번호</th>
+                                    <th class="py-2.5 px-3 text-center">X (m)</th>
+                                    <th class="py-2.5 px-3 text-center">Y (m)</th>
+                                    <th class="py-2.5 px-2 text-center w-12">삭제</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pointTableBody" class="divide-y divide-slate-100">
+                                <!-- Dynamic rows rendered via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2">
+                        <button onclick="addPointRow()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition duration-150 flex items-center space-x-1.5">
+                            <i class="fa-solid fa-plus text-civil-600"></i>
+                            <span>행 추가</span>
+                        </button>
+                        <span class="text-xs text-emerald-600 font-medium flex items-center space-x-1">
+                            <i class="fa-solid fa-link"></i>
+                            <span>마지막 점은 첫 점과 자동 연결</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Rounding Option Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+                    <div class="border-b border-slate-100 pb-3">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                            <i class="fa-solid fa-sliders text-civil-600"></i>
+                            <span>2. 면적 반올림 단위 선택</span>
+                        </h2>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="relative flex flex-col p-3.5 border-2 rounded-xl cursor-pointer transition hover:border-civil-500 rounded-unit-label" id="label-unit-01">
+                            <input type="radio" name="roundingUnit" value="0.1" checked onchange="updateCalculations()" class="sr-only">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-bold text-slate-800">0.1 ㎡ 단위</span>
+                                <i class="fa-solid fa-circle-check text-civil-600 text-lg opacity-100 check-icon"></i>
+                            </div>
+                            <span class="text-xs text-slate-500">축척 600분의 1 지역, 경계점좌표등록부 지역</span>
+                        </label>
+
+                        <label class="relative flex flex-col p-3.5 border-2 rounded-xl cursor-pointer transition hover:border-civil-500 rounded-unit-label" id="label-unit-1">
+                            <input type="radio" name="roundingUnit" value="1.0" onchange="updateCalculations()" class="sr-only">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-bold text-slate-800">1 ㎡ 단위</span>
+                                <i class="fa-solid fa-circle-check text-slate-300 text-lg check-icon"></i>
+                            </div>
+                            <span class="text-xs text-slate-500">그 밖의 지역</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Polygon Graphical Plot (7 cols) -->
+            <div class="lg:col-span-7">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 h-full flex flex-col justify-between space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                            <i class="fa-solid fa-chart-area text-civil-600"></i>
+                            <span>3. 지형 다각형 시각화</span>
+                        </h2>
+                        <span class="text-xs text-slate-500">자동 축척 적용</span>
+                    </div>
+
+                    <div class="relative w-full bg-slate-900 rounded-xl overflow-hidden shadow-inner flex-grow min-h-[320px] flex items-center justify-center p-2">
+                        <canvas id="polygonCanvas" class="w-full h-full block rounded-lg"></canvas>
+                        <div id="canvasEmptyMsg" class="hidden absolute text-center text-slate-400 text-sm">
+                            <i class="fa-solid fa-shapes text-3xl mb-2 text-slate-600"></i>
+                            <p>3개 이상의 좌표를 입력하면<br>다각형 형상이 표시됩니다.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+                            <span>각 다각형 정점 (점 번호 표시)</span>
+                        </div>
+                        <div class="flex items-center space-x-2 mt-1 sm:mt-0">
+                            <span class="w-3 h-0.5 bg-emerald-400 inline-block"></span>
+                            <span>폐합 폐경선 (N → 1)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Lower Full-Width Grid: Shoelace Detailed Calculation Table -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 gap-2">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                        <i class="fa-solid fa-calculator text-civil-600"></i>
+                        <span>4. 신발끈 공식 배면적(2A) 계산 과정</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">공식: 2A = Σ(Xn × Yn+1 − Xn+1 × Yn)</p>
+                </div>
+                <div class="bg-civil-50 text-civil-800 text-xs px-3 py-1.5 rounded-lg border border-civil-200 font-medium">
+                    소수점 이하 3자리(0.001 m²) 정밀도 유지
+                </div>
+            </div>
+
+            <!-- Math Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-center border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-xs font-semibold uppercase border-y border-slate-200">
+                            <th class="py-3 px-3">연결 (n → n+1)</th>
+                            <th class="py-3 px-3 text-right">양의 곱 (Xn × Yn+1)</th>
+                            <th class="py-3 px-3 text-right">음의 곱 (Xn+1 × Yn)</th>
+                            <th class="py-3 px-3 text-right">차 (Xn Yn+1 − Xn+1 Yn)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shoelaceTableBody" class="divide-y divide-slate-100 font-mono text-xs">
+                        <!-- Rendered by JS -->
+                    </tbody>
+                    <tfoot id="shoelaceTableFoot" class="bg-slate-50 font-semibold border-t-2 border-slate-300">
+                        <!-- Total sums rendered by JS -->
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Summary Stat Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-medium">배면적 합계 (2A)</span>
+                    <div class="text-xl font-extrabold text-slate-800 mt-1 font-mono" id="statDoubleArea">0.000 ㎡</div>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-medium">계산 면적 (A = |2A| ÷ 2)</span>
+                    <div class="text-xl font-extrabold text-civil-600 mt-1 font-mono" id="statRawArea">0.000 ㎡</div>
+                </div>
+                <div class="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                    <span class="text-xs text-amber-100 font-semibold">최종 반올림 면적</span>
+                    <div class="text-2xl font-black mt-1 font-mono" id="statRoundedArea">0 ㎡</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rounding Verdict Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-5">
+            <div class="border-b border-slate-100 pb-3">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-scale-balanced text-civil-600"></i>
+                    <span>5. 끝수 처리 상세 판정 이유</span>
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">계산은 0.001 단위 정수로 변경하여 판단을 진행합니다.</p>
+            </div>
+
+            <div id="verdictBox" class="bg-slate-50 rounded-xl p-5 border border-slate-200 space-y-4">
+                <!-- Dynamically filled with integer breakdown and explanation text -->
+            </div>
+        </div>
+
+        <!-- Interactive Rounding Practice Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 gap-2">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                        <i class="fa-solid fa-pen-to-square text-civil-600"></i>
+                        <span>6. 반올림 연습 (끝수 처리 자습서)</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">임의의 면적 수치를 입력하거나 대표 예제를 클릭하여 0.1㎡ 및 1㎡ 반올림 결과를 비교해 보세요.</p>
+                </div>
+            </div>
+
+            <!-- Quick Practice Input & Presets -->
+            <div class="space-y-4">
+                <div class="flex flex-col sm:flex-row items-center gap-3">
+                    <div class="relative w-full sm:w-80">
+                        <label for="practiceAreaInput" class="sr-only">연습 면적 입력</label>
+                        <input type="number" id="practiceAreaInput" step="0.001" value="100.450" 
+                               oninput="runPracticeCalculation()"
+                               placeholder="예: 100.450" 
+                               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-mono font-bold focus:bg-white focus:border-civil-500 table-input">
+                        <span class="absolute right-3 top-2.5 text-xs text-slate-400 font-semibold">㎡</span>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        <span class="text-xs font-semibold text-slate-500 mr-1">대표 시험 예제:</span>
+                        <button onclick="setPracticeValue(100.450)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-mono font-medium text-slate-700 transition">100.450</button>
+                        <button onclick="setPracticeValue(100.550)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-mono font-medium text-slate-700 transition">100.550</button>
+                        <button onclick="setPracticeValue(101.500)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-mono font-medium text-slate-700 transition">101.500</button>
+                        <button onclick="setPracticeValue(262.395)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-mono font-medium text-slate-700 transition">262.395</button>
+                    </div>
+                </div>
+
+                <!-- Comparison Table -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                    <!-- 0.1 m² Result Box -->
+                    <div class="bg-sky-50/60 border border-sky-200 rounded-xl p-4 space-y-3">
+                        <div class="flex items-center justify-between border-b border-sky-100 pb-2">
+                            <span class="font-bold text-sky-900 text-sm">0.1 ㎡ 단위 반올림</span>
+                            <span class="text-xs font-semibold bg-sky-200 text-sky-800 px-2 py-0.5 rounded">소수 첫째자리</span>
+                        </div>
+                        <div id="practiceRes01" class="space-y-2">
+                            <!-- Populated JS -->
+                        </div>
+                    </div>
+
+                    <!-- 1 m² Result Box -->
+                    <div class="bg-indigo-50/60 border border-indigo-200 rounded-xl p-4 space-y-3">
+                        <div class="flex items-center justify-between border-b border-indigo-100 pb-2">
+                            <span class="font-bold text-indigo-900 text-sm">1 ㎡ 단위 반올림</span>
+                            <span class="text-xs font-semibold bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded">정수 단위</span>
+                        </div>
+                        <div id="practiceRes1" class="space-y-2">
+                            <!-- Populated JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 py-6 border-t border-slate-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3 text-sm">
+                <i class="fa-solid fa-graduation-cap text-amber-400 text-xl"></i>
+                <span class="font-medium text-slate-300">고등학교 토목과 측량 실습 가이드 프로그램</span>
+            </div>
+            <div class="text-xs sm:text-sm font-semibold text-amber-300/90 bg-amber-400/10 px-4 py-2 rounded-xl border border-amber-400/20">
+                참고: NCS 학습모듈 「세부측량」 학습 3-2
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Data State Store
+        let points = [
+            { id: 1, x: 499570.67, y: 199767.60 },
+            { id: 2, x: 499559.87, y: 199779.41 },
+            { id: 3, x: 499548.50, y: 199766.64 },
+            { id: 4, x: 499556.01, y: 199758.44 },
+            { id: 5, x: 499561.96, y: 199757.82 }
+        ];
+
+        let nextPointId = 6;
+
+        // Initialize Application
+        window.addEventListener('DOMContentLoaded', () => {
+            renderPointInputs();
+            updateCalculations();
+            runPracticeCalculation();
+            
+            // Canvas resize listener
+            window.addEventListener('resize', drawPolygonCanvas);
+        });
+
+        // Load Preset Example Data
+        function loadExampleData() {
+            points = [
+                { id: 1, x: 499570.67, y: 199767.60 },
+                { id: 2, x: 499559.87, y: 199779.41 },
+                { id: 3, x: 499548.50, y: 199766.64 },
+                { id: 4, x: 499556.01, y: 199758.44 },
+                { id: 5, x: 499561.96, y: 199757.82 }
+            ];
+            nextPointId = 6;
+            
+            // Set unit to 0.1 m²
+            document.querySelector('input[name="roundingUnit"][value="0.1"]').checked = true;
+
+            renderPointInputs();
+            updateCalculations();
+        }
+
+        // Reset Data
+        function resetData() {
+            points = [
+                { id: 1, x: 0, y: 0 },
+                { id: 2, x: 10, y: 0 },
+                { id: 3, x: 10, y: 10 },
+                { id: 4, x: 0, y: 10 }
+            ];
+            nextPointId = 5;
+            renderPointInputs();
+            updateCalculations();
+        }
+
+        // Render Input Table Rows
+        function renderPointInputs() {
+            const tbody = document.getElementById('pointTableBody');
+            tbody.innerHTML = '';
+
+            points.forEach((pt, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-center font-mono font-bold text-civil-700 bg-slate-50/50">
+                        ${idx + 1}
+                    </td>
+                    <td class="py-2 px-2">
+                        <input type="number" step="0.01" value="${pt.x}" 
+                               oninput="updatePointValue(${idx}, 'x', this.value)" 
+                               class="w-full text-right px-2 py-1.5 bg-slate-50 border border-slate-200 rounded font-mono text-xs text-slate-800 table-input focus:bg-white">
+                    </td>
+                    <td class="py-2 px-2">
+                        <input type="number" step="0.01" value="${pt.y}" 
+                               oninput="updatePointValue(${idx}, 'y', this.value)" 
+                               class="w-full text-right px-2 py-1.5 bg-slate-50 border border-slate-200 rounded font-mono text-xs text-slate-800 table-input focus:bg-white">
+                    </td>
+                    <td class="py-2 px-2 text-center">
+                        <button onclick="removePointRow(${idx})" 
+                                ${points.length <= 3 ? 'disabled class="text-slate-300 cursor-not-allowed"' : 'class="text-red-500 hover:text-red-700 p-1 transition"'}>
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function addPointRow() {
+            // Predict next sensible point or default
+            let lastX = points.length > 0 ? points[points.length - 1].x : 0;
+            let lastY = points.length > 0 ? points[points.length - 1].y : 0;
+            points.push({ id: nextPointId++, x: lastX, y: lastY });
+            renderPointInputs();
+            updateCalculations();
+        }
+
+        function removePointRow(index) {
+            if (points.length <= 3) return;
+            points.splice(index, 1);
+            renderPointInputs();
+            updateCalculations();
+        }
+
+        function updatePointValue(index, field, value) {
+            const num = parseFloat(value);
+            points[index][field] = isNaN(num) ? 0 : num;
+            updateCalculations();
+        }
+
+        // Selected Unit UI Highlight helper
+        function syncUnitUI() {
+            const selectedUnit = document.querySelector('input[name="roundingUnit"]:checked').value;
+            const label01 = document.getElementById('label-unit-01');
+            const label1 = document.getElementById('label-unit-1');
+
+            if (selectedUnit === '0.1') {
+                label01.classList.add('border-civil-500', 'bg-sky-50/30');
+                label01.classList.remove('border-slate-200');
+                label01.querySelector('.check-icon').classList.remove('text-slate-300');
+                label01.querySelector('.check-icon').classList.add('text-civil-600');
+
+                label1.classList.remove('border-civil-500', 'bg-sky-50/30');
+                label1.classList.add('border-slate-200');
+                label1.querySelector('.check-icon').classList.add('text-slate-300');
+                label1.querySelector('.check-icon').classList.remove('text-civil-600');
+            } else {
+                label1.classList.add('border-civil-500', 'bg-sky-50/30');
+                label1.classList.remove('border-slate-200');
+                label1.querySelector('.check-icon').classList.remove('text-slate-300');
+                label1.querySelector('.check-icon').classList.add('text-civil-600');
+
+                label01.classList.remove('border-civil-500', 'bg-sky-50/30');
+                label01.classList.add('border-slate-200');
+                label01.querySelector('.check-icon').classList.add('text-slate-300');
+                label01.querySelector('.check-icon').classList.remove('text-civil-600');
+            }
+        }
+
+        /**
+         * Surveying Rounding Rule (끝수 처리 - Banker's Rounding)
+         * Converts exact area value into integer of 0.001 m² step, and decides drop/round up.
+         */
+        function evaluateSurveyingRounding(areaValue, unit) {
+            // Precise integer conversion (0.001 m² = 1 unit)
+            const V = Math.round(Math.round(areaValue * 1000000) / 1000); // Integer in 0.001 m² units
+            const unitStepInt = Math.round(unit * 1000); // 100 for 0.1m², 1000 for 1m²
+            const halfStepInt = unitStepInt / 2; // 50 for 0.1m², 500 for 1m²
+
+            const Q = Math.floor(V / unitStepInt); // Quotient
+            const R = V % unitStepInt; // Remainder in 0.001 unit
+
+            // Target remaining last digit before rounding
+            const lastDigit = Math.abs(Q) % 10;
+            const isEven = (lastDigit % 2 === 0);
+
+            let action = "";
+            let actionType = ""; // 'down', 'up', 'even-down', 'odd-up'
+            let finalQ = Q;
+            let explanation = "";
+
+            if (R < halfStepInt) {
+                action = "버림";
+                actionType = "down";
+                finalQ = Q;
+                explanation = `잔여 정수값 <strong>${R}</strong> (${(R/1000).toFixed(3)} ㎡)이 단위의 절반값 <strong>${halfStepInt}</strong> (${(halfStepInt/1000).toFixed(3)} ㎡)보다 <span class="text-blue-600 font-bold">작으므로 버립니다</span>.`;
+            } else if (R > halfStepInt) {
+                action = "올림";
+                actionType = "up";
+                finalQ = Q + 1;
+                explanation = `잔여 정수값 <strong>${R}</strong> (${(R/1000).toFixed(3)} ㎡)이 단위의 절반값 <strong>${halfStepInt}</strong> (${(halfStepInt/1000).toFixed(3)} ㎡)보다 <span class="text-emerald-600 font-bold">크므로 올립니다</span>.`;
+            } else {
+                // Exactly half! R === halfStepInt
+                if (isEven) {
+                    action = "버림 (짝수 버림)";
+                    actionType = "even-down";
+                    finalQ = Q;
+                    explanation = `잔여 정수값이 정확히 단위의 절반 <strong>${halfStepInt}</strong> (${(halfStepInt/1000).toFixed(3)} ㎡)이며, 남는 끝자리 숫자 <strong>${lastDigit}</strong>가 <span class="text-blue-600 font-bold">짝수(0 포함)이므로 버립니다</span>.`;
+                } else {
+                    action = "올림 (홀수 올림)";
+                    actionType = "odd-up";
+                    finalQ = Q + 1;
+                    explanation = `잔여 정수값이 정확히 단위의 절반 <strong>${halfStepInt}</strong> (${(halfStepInt/1000).toFixed(3)} ㎡)이며, 남는 끝자리 숫자 <strong>${lastDigit}</strong>가 <span class="text-emerald-600 font-bold">홀수이므로 올립니다</span>.`;
+                }
+            }
+
+            const finalRoundedVal = (finalQ * unit).toFixed(unit === 0.1 ? 1 : 0);
+
+            return {
+                rawInteger: V,
+                unitStepInt: unitStepInt,
+                halfStepInt: halfStepInt,
+                quotient: Q,
+                remainder: R,
+                lastDigit: lastDigit,
+                isEven: isEven,
+                action: action,
+                actionType: actionType,
+                explanation: explanation,
+                finalResult: finalRoundedVal
+            };
+        }
+
+        function updateCalculations() {
+            syncUnitUI();
+
+            const n = points.length;
+            if (n < 3) {
+                drawPolygonCanvas();
+                return;
+            }
+
+            let sumPos = 0;
+            let sumNeg = 0;
+
+            const tbody = document.getElementById('shoelaceTableBody');
+            tbody.innerHTML = '';
+
+            for (let i = 0; i < n; i++) {
+                const p1 = points[i];
+                const p2 = points[(i + 1) % n]; // Loop back to start automatically!
+
+                const p1_idx = i + 1;
+                const p2_idx = ((i + 1) % n) + 1;
+
+                const posProd = p1.x * p2.y;
+                const negProd = p2.x * p1.y;
+                const diff = posProd - negProd;
+
+                sumPos += posProd;
+                sumNeg += negProd;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50";
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3 font-semibold text-slate-700 text-center">
+                        ${p1_idx} → ${p2_idx}
+                    </td>
+                    <td class="py-2.5 px-3 text-right text-slate-700">
+                        ${posProd.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </td>
+                    <td class="py-2.5 px-3 text-right text-slate-700">
+                        ${negProd.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </td>
+                    <td class="py-2.5 px-3 text-right ${diff >= 0 ? 'text-emerald-700 font-medium' : 'text-rose-700 font-medium'}">
+                        ${diff >= 0 ? '+' : ''}${diff.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            const doubleArea = sumPos - sumNeg;
+            const absDoubleArea = Math.abs(doubleArea);
+            const trueArea = absDoubleArea / 2.0;
+
+            // Render Table Footer
+            const tfoot = document.getElementById('shoelaceTableFoot');
+            tfoot.innerHTML = `
+                <tr>
+                    <td class="py-3 px-3 text-center">합계 (Σ)</td>
+                    <td class="py-3 px-3 text-right text-slate-900 font-mono font-bold">
+                        ${sumPos.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </td>
+                    <td class="py-3 px-3 text-right text-slate-900 font-mono font-bold">
+                        ${sumNeg.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </td>
+                    <td class="py-3 px-3 text-right text-civil-700 font-mono font-extrabold text-sm">
+                        ${doubleArea.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </td>
+                </tr>
+            `;
+
+            // Update Stat Displays
+            document.getElementById('statDoubleArea').innerText = absDoubleArea.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + ' ㎡';
+            document.getElementById('statRawArea').innerText = trueArea.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + ' ㎡';
+
+            // Selected Rounding Unit
+            const unit = parseFloat(document.querySelector('input[name="roundingUnit"]:checked').value);
+            const roundRes = evaluateSurveyingRounding(trueArea, unit);
+
+            document.getElementById('statRoundedArea').innerText = Number(roundRes.finalResult).toLocaleString('ko-KR', { minimumFractionDigits: unit === 0.1 ? 1 : 0 }) + ' ㎡';
+
+            // Render Verdict Explanation Box
+            renderVerdictBox(trueArea, unit, roundRes);
+
+            // Redraw canvas
+            drawPolygonCanvas();
+        }
+
+        // Render Verdict Explanation UI
+        function renderVerdictBox(trueArea, unit, roundRes) {
+            const vBox = document.getElementById('verdictBox');
+            
+            const badgeClass = roundRes.actionType.includes('up') 
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                : 'bg-blue-100 text-blue-800 border-blue-300';
+
+            vBox.innerHTML = `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                    <div>
+                        <span class="text-xs text-slate-500 font-medium">선택 단위: <strong>${unit} ㎡</strong></span>
+                        <div class="text-sm font-bold text-slate-800 mt-0.5">
+                            계산 면적: <span class="font-mono text-civil-700">${trueArea.toFixed(3)} ㎡</span> 
+                            → 변환 정수 V: <span class="font-mono bg-slate-200 px-1.5 py-0.5 rounded text-slate-900 font-bold">${roundRes.rawInteger}</span> (0.001㎡ 기준)
+                        </div>
+                    </div>
+                    <div class="px-3 py-1.5 rounded-xl border font-bold text-sm text-center ${badgeClass}">
+                        판정: ${roundRes.action} → <span class="text-lg font-black font-mono">${roundRes.finalResult} ㎡</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div class="bg-white p-3 rounded-lg border border-slate-200">
+                        <span class="text-slate-400 block mb-1">단위 나눔 몫 (Q)</span>
+                        <span class="font-mono text-sm font-bold text-slate-800">${roundRes.quotient}</span>
+                        <span class="text-slate-500 block text-[11px] mt-0.5">끝자리 숫자: <strong class="text-slate-800">${roundRes.lastDigit}</strong> (${roundRes.isEven ? '짝수' : '홀수'})</span>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border border-slate-200">
+                        <span class="text-slate-400 block mb-1">잔여 정수값 (R)</span>
+                        <span class="font-mono text-sm font-bold text-slate-800">${roundRes.remainder}</span>
+                        <span class="text-slate-500 block text-[11px] mt-0.5">실제값: ${(roundRes.remainder/1000).toFixed(3)} ㎡</span>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border border-slate-200">
+                        <span class="text-slate-400 block mb-1">판단 기준 절반값</span>
+                        <span class="font-mono text-sm font-bold text-slate-800">${roundRes.halfStepInt}</span>
+                        <span class="text-slate-500 block text-[11px] mt-0.5">기준값: ${(roundRes.halfStepInt/1000).toFixed(3)} ㎡</span>
+                    </div>
+                </div>
+
+                <div class="text-sm bg-white p-3.5 rounded-xl border border-slate-200 text-slate-700 leading-relaxed">
+                    <i class="fa-solid fa-quote-left text-civil-400 mr-2"></i>
+                    ${roundRes.explanation}
+                </div>
+            `;
+        }
+
+        function drawPolygonCanvas() {
+            const canvas = document.getElementById('polygonCanvas');
+            const emptyMsg = document.getElementById('canvasEmptyMsg');
+            const ctx = canvas.getContext('2d');
+
+            // Responsive sizing
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio || 600;
+            canvas.height = rect.height * window.devicePixelRatio || 350;
+
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (points.length < 3) {
+                emptyMsg.classList.remove('hidden');
+                return;
+            } else {
+                emptyMsg.classList.add('hidden');
+            }
+
+            // Find min/max coordinates
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+
+            points.forEach(pt => {
+                if (pt.x < minX) minX = pt.x;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.y > maxY) maxY = pt.y;
+            });
+
+            // Prevent divide by zero for flat lines
+            let rangeX = maxX - minX || 10;
+            let rangeY = maxY - minY || 10;
+
+            const padding = 60 * window.devicePixelRatio;
+            const drawWidth = width - padding * 2;
+            const drawHeight = height - padding * 2;
+
+            // Maintain uniform aspect ratio
+            const scale = Math.min(drawWidth / rangeX, drawHeight / rangeY);
+
+            const offsetX = padding + (drawWidth - rangeX * scale) / 2;
+            const offsetY = padding + (drawHeight - rangeY * scale) / 2;
+
+            // Coordinate conversion function (Surveying Y is usually north, flip Y for canvas)
+            function toCanvasX(x) {
+                return offsetX + (x - minX) * scale;
+            }
+            function toCanvasY(y) {
+                return height - (offsetY + (y - minY) * scale);
+            }
+
+            // Draw subtle background grid
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1 * window.devicePixelRatio;
+            const gridCount = 5;
+            for (let i = 0; i <= gridCount; i++) {
+                const gx = padding + (drawWidth / gridCount) * i;
+                const gy = padding + (drawHeight / gridCount) * i;
+
+                ctx.beginPath();
+                ctx.moveTo(gx, padding);
+                ctx.lineTo(gx, height - padding);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(padding, gy);
+                ctx.lineTo(width - padding, gy);
+                ctx.stroke();
+            }
+
+            // Draw Polygon Fill & Stroke
+            ctx.beginPath();
+            points.forEach((pt, idx) => {
+                const cx = toCanvasX(pt.x);
+                const cy = toCanvasY(pt.y);
+                if (idx === 0) ctx.moveTo(cx, cy);
+                else ctx.lineTo(cx, cy);
+            });
+            ctx.closePath();
+
+            // Gradient Fill
+            const grad = ctx.createLinearGradient(0, 0, width, height);
+            grad.addColorStop(0, 'rgba(2, 132, 199, 0.25)');
+            grad.addColorStop(1, 'rgba(245, 158, 11, 0.15)');
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // Line Stroke
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.5 * window.devicePixelRatio;
+            ctx.stroke();
+
+            // Draw Vertices and Labels
+            points.forEach((pt, idx) => {
+                const cx = toCanvasX(pt.x);
+                const cy = toCanvasY(pt.y);
+
+                // Point Halo
+                ctx.beginPath();
+                ctx.arc(cx, cy, 7 * window.devicePixelRatio, 0, Math.PI * 2);
+                ctx.fillStyle = '#fbbf24';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.stroke();
+
+                // Text Label
+                ctx.font = `bold ${13 * window.devicePixelRatio}px 'Noto Sans KR', sans-serif`;
+                ctx.fillStyle = '#f8fafc';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(`P${idx + 1}`, cx, cy - 10 * window.devicePixelRatio);
+            });
+        }
+
+        function setPracticeValue(val) {
+            document.getElementById('practiceAreaInput').value = val;
+            runPracticeCalculation();
+        }
+
+        function runPracticeCalculation() {
+            const inputVal = parseFloat(document.getElementById('practiceAreaInput').value);
+            const box01 = document.getElementById('practiceRes01');
+            const box1 = document.getElementById('practiceRes1');
+
+            if (isNaN(inputVal) || inputVal < 0) {
+                box01.innerHTML = `<span class="text-xs text-rose-500 font-semibold">유효한 수치를 입력해 주세요.</span>`;
+                box1.innerHTML = `<span class="text-xs text-rose-500 font-semibold">유효한 수치를 입력해 주세요.</span>`;
+                return;
+            }
+
+            const res01 = evaluateSurveyingRounding(inputVal, 0.1);
+            const res1 = evaluateSurveyingRounding(inputVal, 1.0);
+
+            // Render 0.1 m² Box
+            box01.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-600">입력 정수(V): <strong class="font-mono text-slate-800">${res01.rawInteger}</strong></span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded ${res01.actionType.includes('up') ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}">${res01.action}</span>
+                </div>
+                <div class="text-2xl font-black text-sky-900 font-mono">
+                    ${res01.finalResult} <span class="text-sm font-normal text-slate-600">㎡</span>
+                </div>
+                <div class="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-sky-100 leading-relaxed">
+                    ${res01.explanation}
+                </div>
+            `;
+
+            // Render 1 m² Box
+            box1.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-600">입력 정수(V): <strong class="font-mono text-slate-800">${res1.rawInteger}</strong></span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded ${res1.actionType.includes('up') ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}">${res1.action}</span>
+                </div>
+                <div class="text-2xl font-black text-indigo-900 font-mono">
+                    ${res1.finalResult} <span class="text-sm font-normal text-slate-600">㎡</span>
+                </div>
+                <div class="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-indigo-100 leading-relaxed">
+                    ${res1.explanation}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

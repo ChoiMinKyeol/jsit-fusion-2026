@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>공간정보 영상 전처리 체험실</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
+                            dark: '#090d16',
+                            card: '#111827',
+                            border: '#1f2937'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #090d16;
+            color: #f3f4f6;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        canvas {
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-slate-100">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 px-4 py-3 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-900/40">
+                    <i class="fa-solid fa-satellite-dish text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                        공간정보 영상 전처리 체험실
+                        <span class="text-xs font-normal px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">고교 공간정보 수업용</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">원격탐사 원시 항공·위성 영상의 품질 개선 및 핵심 알고리즘 실습</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="btnRegenSample" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-rotate text-emerald-400"></i>
+                    샘플 다시 만들기
+                </button>
+                <label for="fileInput" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-upload text-blue-400"></i>
+                    내 사진 불러오기
+                </label>
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+                
+                <button id="btnDownload" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md shadow-emerald-900/30">
+                    <i class="fa-solid fa-download"></i>
+                    결과 PNG 내려받기
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+        
+        <!-- Left Column: Dual Canvas & Histograms (7 cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- Side-by-Side Image Displays -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
+                <!-- Original Image Container -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 shadow-lg flex flex-col items-center">
+                    <div class="w-full flex justify-between items-center mb-2 px-1">
+                        <span class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-image text-slate-400"></i> 원본 영상 (256×256)
+                        </span>
+                        <span id="origInfo" class="text-[10px] text-slate-400 font-mono">저대비/어두움</span>
+                    </div>
+                    <div class="relative w-full aspect-square max-w-[280px] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center">
+                        <canvas id="canvasOrig" width="256" height="256" class="w-full h-full object-contain"></canvas>
+                    </div>
+                    <!-- Histogram Original -->
+                    <div class="w-full mt-3 pt-2 border-t border-slate-800/80">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[11px] font-medium text-slate-400">원본 명암 히스토그램</span>
+                            <span id="origHistStats" class="text-[10px] text-slate-500 font-mono">0~255</span>
+                        </div>
+                        <canvas id="canvasHistOrig" width="256" height="70" class="w-full h-16 bg-slate-950 rounded border border-slate-800/60"></canvas>
+                    </div>
+                </div>
+
+                <!-- Processed Result Image Container -->
+                <div class="bg-slate-900/90 border border-emerald-900/40 rounded-xl p-3 shadow-lg flex flex-col items-center">
+                    <div class="w-full flex justify-between items-center mb-2 px-1">
+                        <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i> 전처리 결과 영상
+                        </span>
+                        <span id="procInfo" class="text-[10px] text-emerald-300/80 font-mono">Step: 0</span>
+                    </div>
+                    <div class="relative w-full aspect-square max-w-[280px] bg-slate-950 rounded-lg overflow-hidden border border-emerald-800/40 flex items-center justify-center">
+                        <canvas id="canvasResult" width="256" height="256" class="w-full h-full object-contain"></canvas>
+                    </div>
+                    <!-- Histogram Result -->
+                    <div class="w-full mt-3 pt-2 border-t border-slate-800/80">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[11px] font-medium text-emerald-300/80">결과 명암 히스토그램</span>
+                            <span id="resultHistStats" class="text-[10px] text-emerald-500/80 font-mono">0~255</span>
+                        </div>
+                        <canvas id="canvasHistResult" width="256" height="70" class="w-full h-16 bg-slate-950 rounded border border-slate-800/60"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- History & Sequence Bar -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 shadow-sm">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-timeline text-emerald-400"></i>
+                        적용된 처리 순서 (Sequence Stack)
+                    </h3>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btnUndo" class="px-2.5 py-1 text-[11px] font-medium rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center gap-1">
+                            <i class="fa-solid fa-rotate-left"></i> 되돌리기
+                        </button>
+                        <button id="btnReset" class="px-2.5 py-1 text-[11px] font-medium rounded bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 transition flex items-center gap-1">
+                            <i class="fa-solid fa-power-off"></i> 처음으로
+                        </button>
+                    </div>
+                </div>
+                <!-- History Badge List -->
+                <div id="historyContainer" class="flex flex-wrap items-center gap-1.5 min-h-[36px] p-2 bg-slate-950 rounded-lg border border-slate-800/80 text-xs">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Educational Notice Box -->
+            <div id="infoTooltipBox" class="bg-emerald-950/40 border border-emerald-800/50 rounded-xl p-3 text-xs text-emerald-200 flex items-start gap-2.5">
+                <i class="fa-solid fa-circle-info text-emerald-400 text-sm mt-0.5 shrink-0"></i>
+                <div id="infoTooltipText" class="leading-relaxed">
+                    도구 버튼을 누르면 해당 전처리 알고리즘이 <strong>현재 결과 영상에 순차적으로 적용</strong>됩니다. 오른쪽 제어판에서 원하는 전처리 기법을 클릭해 보세요.
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Column: Preprocessing Controls (5 cols) -->
+        <section class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-100px)]">
+            <h2 class="text-sm font-bold text-slate-100 border-b border-slate-800 pb-2 flex items-center justify-between">
+                <span><i class="fa-solid fa-sliders text-emerald-400 mr-1.5"></i>영상 전처리 알고리즘</span>
+                <span class="text-[10px] text-slate-400 font-normal">단계별 누적 처리</span>
+            </h2>
+
+            <!-- Group 1: Grayscale Conversion -->
+            <div class="space-y-2">
+                <div class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>1. 명암도(Grayscale) 변환</span>
+                    <i class="fa-solid fa-circle-question text-slate-500 text-[11px]" title="컬러 3채널(RGB)을 단일 명암 채널로 변환합니다."></i>
+                </div>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button id="btnGrayAvg" class="btn-algo px-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-center"
+                            data-tip="평균법: (R + G + B) / 3 단순 평균으로 흑백 변환합니다.">
+                        평균
+                    </button>
+                    <button id="btnGrayLum" class="btn-algo px-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-center font-mono"
+                            data-tip="휘도(Luminance) 공식: 인간 시각 감도를 반영하여 0.299R + 0.587G + 0.114B 비율로 가중치 적용.">
+                        0.299·0.587·0.114
+                    </button>
+                    <button id="btnGrayG" class="btn-algo px-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-center"
+                            data-tip="G 채널 추출: 식생(지식생 index) 탐지에 유용한 녹색 단일 채널만 추출합니다.">
+                        G 채널만
+                    </button>
+                </div>
+            </div>
+
+            <!-- Group 2: Brightness & Contrast -->
+            <div class="space-y-2.5 pt-2 border-t border-slate-800">
+                <div class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>2. 밝기 및 명암비(Contrast) 조절</span>
+                    <button id="btnInvert" class="px-2 py-0.5 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700"
+                            data-tip="반전(Invert): 화소값을 (255 - 화소값)으로 반전시켜 수계나 음영을 강조합니다.">
+                        <i class="fa-solid fa-circle-half-stroke mr-1"></i>반전
+                    </button>
+                </div>
+
+                <!-- Brightness Slider -->
+                <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+                    <div class="flex justify-between items-center text-[11px] text-slate-400 mb-1">
+                        <span>밝기 (Brightness)</span>
+                        <span id="valBrightness" class="font-mono text-emerald-400">+0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="range" id="sliderBrightness" min="-100" max="100" value="0" class="w-full accent-emerald-500">
+                        <button id="btnApplyBrightness" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 shrink-0 border border-slate-700">
+                            적용
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contrast Slider -->
+                <div class="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+                    <div class="flex justify-between items-center text-[11px] text-slate-400 mb-1">
+                        <span>명암비 (Contrast)</span>
+                        <span id="valContrast" class="font-mono text-emerald-400">0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="range" id="sliderContrast" min="-100" max="100" value="0" class="w-full accent-emerald-500">
+                        <button id="btnApplyContrast" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 shrink-0 border border-slate-700">
+                            적용
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Min-Max Contrast Stretch -->
+                <button id="btnMinMaxStretch" class="btn-algo w-full py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition flex items-center justify-center gap-1.5"
+                        data-tip="최소-최대 강조(Min-Max Stretch): 화소 최솟값을 0, 최댓값을 255로 선형 확장하여 좁은 명암 범위를 전체 범위로 대비를 키웁니다.">
+                    <i class="fa-solid fa-arrows-left-right-to-line text-emerald-400"></i>
+                    최소-최대 강조 (Contrast Stretch)
+                </button>
+            </div>
+
+            <!-- Group 3: Histogram Equalization & Binarization -->
+            <div class="space-y-2.5 pt-2 border-t border-slate-800">
+                <div class="text-xs font-semibold text-slate-300">
+                    3. 히스토그램 균등화 & 이진화
+                </div>
+
+                <!-- Equalization Button -->
+                <button id="btnHistEq" class="btn-algo w-full py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition flex items-center justify-center gap-1.5"
+                        data-tip="균등화: 어두운 영상의 명암을 고르게 분포시킵니다. 밝기 분산이 커지나 잡음도 함께 강조될 수 있습니다.">
+                    <i class="fa-solid fa-chart-column text-emerald-400"></i>
+                    히스토그램 균등화 (Equalization)
+                </button>
+
+                <!-- Binarization Block -->
+                <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 space-y-2">
+                    <div class="flex justify-between items-center text-[11px]">
+                        <span class="text-slate-300 font-medium">이진화 (Binarization / Thresholding)</span>
+                        <span id="valThreshold" class="font-mono text-emerald-400">임계값: 128</span>
+                    </div>
+                    <input type="range" id="sliderThreshold" min="0" max="255" value="128" class="w-full accent-emerald-500">
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button id="btnApplyThreshold" class="py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                                data-tip="수동 이진화: 지정된 임곗값 미만은 0(검정), 이상은 255(흰색)로 분할합니다.">
+                            슬라이더 값 적용
+                        </button>
+                        <button id="btnAutoThreshold" class="py-1 text-xs rounded bg-emerald-800/60 hover:bg-emerald-700 text-emerald-100 border border-emerald-600/50 flex items-center justify-center gap-1"
+                                data-tip="자동 임곗값(반복법): 전체 평균에서 시작해 배경과 물체 두 무리의 평균의 평균으로 수렴할 때까지 반복 계산합니다.">
+                            <i class="fa-solid fa-wand-magic"></i> 자동 임곗값
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Group 4: Noise Injection -->
+            <div class="space-y-2 pt-2 border-t border-slate-800">
+                <div class="text-xs font-semibold text-slate-300">
+                    4. 잡음(Noise) 추가 실험
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btnSaltNoise" class="btn-algo py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-amber-900/40 border border-slate-700 hover:border-amber-600 text-slate-200 transition flex items-center justify-center gap-1"
+                            data-tip="점 잡음(Salt & Pepper): 무작위 화소를 강제로 0(검은 점) 또는 255(흰 점)로 오염시킵니다.">
+                        <i class="fa-solid fa-disease text-amber-400"></i> 점 잡음 추가
+                    </button>
+                    <button id="btnGaussianNoise" class="btn-algo py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-amber-900/40 border border-slate-700 hover:border-amber-600 text-slate-200 transition flex items-center justify-center gap-1"
+                            data-tip="가우시안 잡음: 센서 노이즈처럼 정규분포 오차를 영상 전반에 무작위 추가합니다.">
+                        <i class="fa-solid fa-wave-square text-amber-400"></i> 가우시안 잡음 추가
+                    </button>
+                </div>
+            </div>
+
+            <!-- Group 5: Spatial Filtering (Smoothing/Sharpening) -->
+            <div class="space-y-2 pt-2 border-t border-slate-800">
+                <div class="text-xs font-semibold text-slate-300">
+                    5. 공간 필터링 (Spatial Filtering)
+                </div>
+                
+                <!-- Filter Buttons Grid -->
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- Mean 3x3 -->
+                    <button id="btnMean3" class="btn-algo p-2 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-left"
+                            data-tip="평균 필터: 잡음은 줄지만 경계가 흐려짐 (Blurring effect).">
+                        <div class="font-bold text-slate-100">평균 필터 3×3</div>
+                        <div class="text-[10px] text-slate-400">잡음 감소 / 경계 흐려짐</div>
+                    </button>
+
+                    <!-- Mean 5x5 -->
+                    <button id="btnMean5" class="btn-algo p-2 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-left"
+                            data-tip="평균 필터 5x5: 더 넓은 범위를 평균화하여 강력하게 흐리게 만듭니다.">
+                        <div class="font-bold text-slate-100">평균 필터 5×5</div>
+                        <div class="text-[10px] text-slate-400">강한 블러링 효과</div>
+                    </button>
+
+                    <!-- Gaussian 3x3 -->
+                    <button id="btnGauss3" class="btn-algo p-2 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-left"
+                            data-tip="가우시안 필터 3x3: 중심 화소에 가중치를 두어 자연스러운 스무딩을 수행합니다.">
+                        <div class="font-bold text-slate-100">가우시안 3×3</div>
+                        <div class="text-[10px] text-slate-400">가중치 평활화</div>
+                    </button>
+
+                    <!-- Median 3x3 -->
+                    <button id="btnMedian3" class="btn-algo p-2 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-left"
+                            data-tip="중간값 필터: 점 잡음에 강하고 경계를 남김 (Edge preserving).">
+                        <div class="font-bold text-slate-100">중간값 필터 3×3</div>
+                        <div class="text-[10px] text-slate-400">점잡음 제거 / 경계 보존</div>
+                    </button>
+
+                    <!-- Median 5x5 -->
+                    <button id="btnMedian5" class="btn-algo p-2 text-xs rounded-lg bg-slate-800 hover:bg-emerald-700/60 border border-slate-700 hover:border-emerald-500 text-slate-200 transition text-left col-span-2"
+                            data-tip="중간값 필터 5x5: 더 심한 점 잡음을 보존성 높게 깔끔히 제거합니다.">
+                        <div class="font-bold text-slate-100">중간값 필터 5×5</div>
+                        <div class="text-[10px] text-slate-400">점 잡음을 더 강하게 줄임, 가는 선은 흐려질 수 있음</div>
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer with Source Attribution -->
+    <footer class="bg-slate-900 border-t border-slate-800 py-3 px-4 mt-6 text-center text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div>
+                <span class="font-semibold text-slate-300">공간정보 영상 전처리 실습 가상실험실</span> | 고등학교 공간정보 및 원격탐사 교육용
+            </div>
+            <div class="text-slate-400 text-[11px]">
+                출처: NCS 학습모듈 「공간영상 처리」(LM1402030405_21v2, 교육부·한국직업능력연구원) 학습 1.
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Image Processing Engine -->
+    <script>
+        // Global Canvas Elements & Contexts
+        const canvasOrig = document.getElementById('canvasOrig');
+        const ctxOrig = canvasOrig.getContext('2d');
+        const canvasResult = document.getElementById('canvasResult');
+        const ctxResult = canvasResult.getContext('2d');
+
+        const canvasHistOrig = document.getElementById('canvasHistOrig');
+        const ctxHistOrig = canvasHistOrig.getContext('2d');
+        const canvasHistResult = document.getElementById('canvasHistResult');
+        const ctxHistResult = canvasHistResult.getContext('2d');
+
+        // History Stack Management
+        // History contains objects: { imgData: ImageData, label: string }
+        let historyStack = [];
+        let originalImgData = null;
+
+        // UI Tooltip Element
+        const tooltipText = document.getElementById('infoTooltipText');
+
+        // Setup Hover Tooltips for All Interactive Buttons
+        document.querySelectorAll('[data-tip]').forEach(el => {
+            el.addEventListener('mouseenter', () => {
+                tooltipText.innerHTML = el.getAttribute('data-tip');
+            });
+        });
+
+        // Initialize App on Window Load
+        window.addEventListener('load', () => {
+            generateSyntheticAerialSample();
+        });
+
+        /**
+         * Generates a 256x256 realistic synthetic aerial satellite image
+         * Features: Farmland grid, winding blue river, roads, building structures
+         * Post-processed to be intentionally dark and low-contrast for learning!
+         */
+        function generateSyntheticAerialSample() {
+            const width = 256;
+            const height = 256;
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = width;
+            offCanvas.height = height;
+            const ctx = offCanvas.getContext('2d');
+
+            // 1. Farmland background with geometric patch variations
+            ctx.fillStyle = '#2d3b24'; // base olive green
+            ctx.fillRect(0, 0, width, height);
+
+            const patchColors = ['#3d4d2d', '#4f5c34', '#344026', '#524b33', '#2a3621', '#473d2a'];
+            for (let x = 0; x < width; x += 32) {
+                for (let y = 0; y < height; y += 32) {
+                    const c = patchColors[Math.floor(Math.random() * patchColors.length)];
+                    ctx.fillStyle = c;
+                    ctx.fillRect(x + 1, y + 1, 30, 30);
+                    
+                    // Subtle crop lines
+                    if (Math.random() > 0.4) {
+                        ctx.strokeStyle = '#1e2817';
+                        ctx.lineWidth = 1;
+                        for (let lx = x + 4; lx < x + 28; lx += 4) {
+                            ctx.beginPath();
+                            ctx.moveTo(lx, y + 2);
+                            ctx.lineTo(lx, y + 28);
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            // 2. Winding River across the image
+            ctx.beginPath();
+            ctx.moveTo(0, 180);
+            ctx.bezierCurveTo(80, 200, 140, 90, 256, 120);
+            ctx.lineWidth = 18;
+            ctx.strokeStyle = '#1b3846'; // dark river blue
+            ctx.stroke();
+
+            ctx.lineWidth = 12;
+            ctx.strokeStyle = '#274e63';
+            ctx.stroke();
+
+            // 3. Road Network
+            ctx.beginPath();
+            ctx.moveTo(110, 0);
+            ctx.lineTo(130, 256);
+            ctx.moveTo(0, 80);
+            ctx.lineTo(256, 70);
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = '#383838'; // asphalt
+            ctx.stroke();
+
+            // Road center dashes
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.moveTo(110, 0);
+            ctx.lineTo(130, 256);
+            ctx.moveTo(0, 80);
+            ctx.lineTo(256, 70);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#9e9e9e';
+            ctx.stroke();
+            ctx.setLineDash([]); // reset
+
+            // 4. Buildings & Concrete structures
+            const bldgPositions = [
+                {x: 40, y: 30, w: 20, h: 16, color: '#8c857b'},
+                {x: 65, y: 32, w: 14, h: 22, color: '#9c4c3e'},
+                {x: 140, y: 25, w: 28, h: 20, color: '#a3a8ad'},
+                {x: 160, y: 180, w: 22, h: 18, color: '#b3987d'},
+                {x: 190, y: 175, w: 18, h: 25, color: '#7a8582'},
+                {x: 80, y: 120, w: 24, h: 20, color: '#6e756d'}
+            ];
+
+            bldgPositions.forEach(b => {
+                // Drop shadow
+                ctx.fillStyle = '#101510';
+                ctx.fillRect(b.x + 3, b.y + 3, b.w, b.h);
+                // Roof
+                ctx.fillStyle = b.color;
+                ctx.fillRect(b.x, b.y, b.w, b.h);
+            });
+
+            // Read pristine generated image pixels
+            const rawData = ctx.getImageData(0, 0, width, height);
+            const d = rawData.data;
+
+            // 5. Artificial Darkening & Low Contrast Compression
+            // Formula: pixel = pixel * 0.35 + 20 (makes image dark with low contrast histogram)
+            for (let i = 0; i < d.length; i += 4) {
+                d[i] = Math.min(255, Math.max(0, Math.floor(d[i] * 0.38 + 22)));     // R
+                d[i+1] = Math.min(255, Math.max(0, Math.floor(d[i+1] * 0.38 + 22))); // G
+                d[i+2] = Math.min(255, Math.max(0, Math.floor(d[i+2] * 0.38 + 22))); // B
+            }
+
+            // Put image into Original Canvas
+            ctxOrig.putImageData(rawData, 0, 0);
+            originalImgData = ctxOrig.getImageData(0, 0, width, height);
+
+            // Reset history stack
+            historyStack = [{
+                imgData: cloneImageData(originalImgData),
+                label: '원본 (저대비)'
+            }];
+
+            updateResultView();
+            drawHistogram(originalImgData, ctxHistOrig, '#38bdf8');
+        }
+
+        /** Helper to duplicate ImageData */
+        function cloneImageData(src) {
+            const dst = new ImageData(new Uint8ClampedArray(src.data), src.width, src.height);
+            return dst;
+        }
+
+        /** Helper to get current top image from stack */
+        function getCurrentImage() {
+            return historyStack[historyStack.length - 1].imgData;
+        }
+
+        /** Push new processed state into history stack */
+        function pushProcessedState(newImgData, label) {
+            historyStack.push({
+                imgData: cloneImageData(newImgData),
+                label: label
+            });
+            updateResultView();
+        }
+
+        /** Render history badges and update Result Canvas & Histogram */
+        function updateResultView() {
+            const current = getCurrentImage();
+            ctxResult.putImageData(current, 0, 0);
+
+            // Update Histogram
+            drawHistogram(current, ctxHistResult, '#34d399');
+
+            // Render History Badges
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '';
+
+            historyStack.forEach((item, idx) => {
+                const badge = document.createElement('span');
+                badge.className = `inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
+                    idx === historyStack.length - 1 
+                        ? 'bg-emerald-900/80 text-emerald-200 border-emerald-600' 
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                }`;
+                badge.innerHTML = `<span class="opacity-60 text-[10px]">${idx + 1}.</span> ${item.label}`;
+                container.appendChild(badge);
+
+                if (idx < historyStack.length - 1) {
+                    const arrow = document.createElement('i');
+                    arrow.className = 'fa-solid fa-chevron-right text-[9px] text-slate-600';
+                    container.appendChild(arrow);
+                }
+            });
+
+            document.getElementById('procInfo').innerText = `Step: ${historyStack.length - 1}`;
+        }
+
+        /**
+         * Calculates intensity histogram (0~255) and draws bar chart on specified canvas
+         */
+        function drawHistogram(imgData, ctx, barColor) {
+            const w = ctx.canvas.width;
+            const h = ctx.canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const hist = new Array(256).fill(0);
+            const d = imgData.data;
+
+            let totalIntensity = 0;
+            const totalPixels = imgData.width * imgData.height;
+
+            // Compute Grayscale intensity histogram
+            for (let i = 0; i < d.length; i += 4) {
+                const gray = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                hist[gray]++;
+                totalIntensity += gray;
+            }
+
+            const maxCount = Math.max(...hist, 1);
+            const meanIntensity = (totalIntensity / totalPixels).toFixed(1);
+
+            // Draw grid lines
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x < w; x += 64) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+            }
+            ctx.stroke();
+
+            // Draw Histogram Bars
+            ctx.fillStyle = barColor;
+            for (let i = 0; i < 256; i++) {
+                const barHeight = (hist[i] / maxCount) * (h - 6);
+                if (barHeight > 0) {
+                    ctx.fillRect(i * (w / 256), h - barHeight, Math.max(1, w / 256), barHeight);
+                }
+            }
+
+            // Draw mean intensity line
+            const meanX = Math.round((meanIntensity / 255) * w);
+            ctx.strokeStyle = '#ef4444'; // Red line for mean
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(meanX, 0);
+            ctx.lineTo(meanX, h);
+            ctx.stroke();
+
+            // Update text stat labels if result
+            if (ctx === ctxHistResult) {
+                document.getElementById('resultHistStats').innerText = `평균: ${meanIntensity} | Max: ${maxCount}`;
+            } else {
+                document.getElementById('origHistStats').innerText = `평균: ${meanIntensity}`;
+            }
+        }
+
+
+        // 1. Grayscale Conversion
+        function processGrayscale(type) {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+
+            let label = '명암도';
+
+            for (let i = 0; i < d.length; i += 4) {
+                let g = 0;
+                if (type === 'avg') {
+                    g = Math.round((d[i] + d[i+1] + d[i+2]) / 3);
+                    label = '명암도 (평균)';
+                } else if (type === 'lum') {
+                    g = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                    label = '명암도 (Luminance)';
+                } else if (type === 'g') {
+                    g = d[i+1]; // Green channel only
+                    label = '명암도 (G채널)';
+                }
+                d[i] = g;
+                d[i+1] = g;
+                d[i+2] = g;
+            }
+            pushProcessedState(src, label);
+        }
+
+        // 2. Invert Image
+        function processInvert() {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+
+            for (let i = 0; i < d.length; i += 4) {
+                d[i] = 255 - d[i];
+                d[i+1] = 255 - d[i+1];
+                d[i+2] = 255 - d[i+2];
+            }
+            pushProcessedState(src, '반전');
+        }
+
+        // 3. Brightness Adjustment
+        function processBrightness(val) {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+
+            for (let i = 0; i < d.length; i += 4) {
+                d[i] = Math.min(255, Math.max(0, d[i] + val));
+                d[i+1] = Math.min(255, Math.max(0, d[i+1] + val));
+                d[i+2] = Math.min(255, Math.max(0, d[i+2] + val));
+            }
+            pushProcessedState(src, `밝기 (${val >= 0 ? '+' + val : val})`);
+        }
+
+        // 4. Contrast Adjustment
+        function processContrast(val) {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+
+            // Factor formula
+            const factor = (259 * (val + 255)) / (255 * (259 - val));
+
+            for (let i = 0; i < d.length; i += 4) {
+                d[i] = Math.min(255, Math.max(0, Math.round(factor * (d[i] - 128) + 128)));
+                d[i+1] = Math.min(255, Math.max(0, Math.round(factor * (d[i+1] - 128) + 128)));
+                d[i+2] = Math.min(255, Math.max(0, Math.round(factor * (d[i+2] - 128) + 128)));
+            }
+            pushProcessedState(src, `명암비 (${val >= 0 ? '+' + val : val})`);
+        }
+
+
+        // 5. Min-Max Contrast Stretching
+        function processMinMaxStretch() {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+
+            let min = 255, max = 0;
+            for (let i = 0; i < d.length; i += 4) {
+                const lum = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                if (lum < min) min = lum;
+                if (lum > max) max = lum;
+            }
+
+            if (max <= min) return; // avoid division by zero
+
+            for (let i = 0; i < d.length; i += 4) {
+                d[i] = Math.min(255, Math.max(0, Math.round(((d[i] - min) / (max - min)) * 255)));
+                d[i+1] = Math.min(255, Math.max(0, Math.round(((d[i+1] - min) / (max - min)) * 255)));
+                d[i+2] = Math.min(255, Math.max(0, Math.round(((d[i+2] - min) / (max - min)) * 255)));
+            }
+
+            pushProcessedState(src, `최소-최대 강조 (${min}~${max} → 0~255)`);
+        }
+
+        // 6. Histogram Equalization
+        function processHistogramEqualization() {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+            const numPixels = src.width * src.height;
+
+            // 1. Calculate intensity histogram
+            const hist = new Array(256).fill(0);
+            for (let i = 0; i < d.length; i += 4) {
+                const gray = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                hist[gray]++;
+            }
+
+            // 2. Compute Cumulative Distribution Function (CDF)
+            const cdf = new Array(256).fill(0);
+            let cumulative = 0;
+            let cdfMin = -1;
+
+            for (let i = 0; i < 256; i++) {
+                cumulative += hist[i];
+                cdf[i] = cumulative;
+                if (cdfMin === -1 && hist[i] > 0) {
+                    cdfMin = hist[i];
+                }
+            }
+
+            // 3. Create Mapping LUT
+            const lut = new Array(256);
+            for (let i = 0; i < 256; i++) {
+                lut[i] = Math.round(((cdf[i] - cdfMin) / (numPixels - cdfMin)) * 255);
+            }
+
+            // 4. Apply LUT to pixels
+            for (let i = 0; i < d.length; i += 4) {
+                d[i] = lut[d[i]];
+                d[i+1] = lut[d[i+1]];
+                d[i+2] = lut[d[i+2]];
+            }
+
+            pushProcessedState(src, '히스토그램 균등화');
+        }
+
+
+        // 7. Manual Binarization
+        function processBinarization(threshold) {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+
+            for (let i = 0; i < d.length; i += 4) {
+                const gray = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                const val = gray >= threshold ? 255 : 0;
+                d[i] = val;
+                d[i+1] = val;
+                d[i+2] = val;
+            }
+
+            pushProcessedState(src, `이진화 (T=${threshold})`);
+        }
+
+        // 8. Automatic Iterative Thresholding (ISODATA / Iterative Means)
+        // Algorithm: Start with mean intensity. Partition into 2 groups (Foreground / Background).
+        // New threshold = mean of group1 and group2 means. Repeat until convergence.
+        function processAutoThreshold() {
+            const current = getCurrentImage();
+            const d = current.data;
+
+            // Collect intensity array
+            const intensities = [];
+            let sum = 0;
+            for (let i = 0; i < d.length; i += 4) {
+                const g = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                intensities.push(g);
+                sum += g;
+            }
+
+            let T = sum / intensities.length; // initial threshold = mean
+            let iterations = 0;
+            let diff = 999;
+
+            while (diff > 0.5 && iterations < 100) {
+                let sum1 = 0, count1 = 0;
+                let sum2 = 0, count2 = 0;
+
+                for (let i = 0; i < intensities.length; i++) {
+                    const val = intensities[i];
+                    if (val < T) {
+                        sum1 += val;
+                        count1++;
+                    } else {
+                        sum2 += val;
+                        count2++;
+                    }
+                }
+
+                const m1 = count1 > 0 ? sum1 / count1 : 0;
+                const m2 = count2 > 0 ? sum2 / count2 : 255;
+                const newT = (m1 + m2) / 2;
+
+                diff = Math.abs(newT - T);
+                T = newT;
+                iterations++;
+            }
+
+            const finalT = Math.round(T);
+            document.getElementById('sliderThreshold').value = finalT;
+            document.getElementById('valThreshold').innerText = `임계값: ${finalT}`;
+
+            // Apply Binarization
+            processBinarization(finalT);
+
+            // Display iteration info to user
+            tooltipText.innerHTML = `<strong>자동 임곗값 도출 완료!</strong><br>반복 계산 횟수: ${iterations}회 | 최종 수렴 임계값 T = <strong>${finalT}</strong>`;
+        }
+
+
+        // 9. Add Salt & Pepper Noise (점 잡음)
+        function processSaltPepperNoise() {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+            const amount = 0.04; // 4% corrupted pixels
+
+            const numCorrupt = Math.floor((src.width * src.height) * amount);
+
+            for (let k = 0; k < numCorrupt; k++) {
+                const idx = Math.floor(Math.random() * (src.width * src.height)) * 4;
+                const salt = Math.random() > 0.5 ? 255 : 0;
+                d[idx] = salt;
+                d[idx+1] = salt;
+                d[idx+2] = salt;
+            }
+
+            pushProcessedState(src, '점 잡음 추가');
+        }
+
+        // 10. Add Gaussian Noise
+        function processGaussianNoise() {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = src.data;
+            const stdDev = 22; // noise intensity
+
+            // Box-Muller transform for normal distribution
+            for (let i = 0; i < d.length; i += 4) {
+                const u1 = Math.random() || 1e-6;
+                const u2 = Math.random();
+                const noise = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2) * stdDev;
+
+                d[i] = Math.min(255, Math.max(0, Math.round(d[i] + noise)));
+                d[i+1] = Math.min(255, Math.max(0, Math.round(d[i+1] + noise)));
+                d[i+2] = Math.min(255, Math.max(0, Math.round(d[i+2] + noise)));
+            }
+
+            pushProcessedState(src, '가우시안 잡음 추가');
+        }
+
+
+        // Helper for spatial neighbor index clamping
+        function getPixelAt(d, w, h, x, y) {
+            const cx = Math.min(w - 1, Math.max(0, x));
+            const cy = Math.min(h - 1, Math.max(0, y));
+            const idx = (cy * w + cx) * 4;
+            return [d[idx], d[idx+1], d[idx+2]];
+        }
+
+        // 11. Mean Filter (Box Filter) NxN
+        function processMeanFilter(size) {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = current.data;
+            const out = src.data;
+            const w = current.width;
+            const h = current.height;
+
+            const half = Math.floor(size / 2);
+            const total = size * size;
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0;
+
+                    for (let dy = -half; dy <= half; dy++) {
+                        for (let dx = -half; dx <= half; dx++) {
+                            const [r, g, b] = getPixelAt(d, w, h, x + dx, y + dy);
+                            rSum += r;
+                            gSum += g;
+                            bSum += b;
+                        }
+                    }
+
+                    const idx = (y * w + x) * 4;
+                    out[idx] = Math.round(rSum / total);
+                    out[idx+1] = Math.round(gSum / total);
+                    out[idx+2] = Math.round(bSum / total);
+                }
+            }
+
+            pushProcessedState(src, `평균 필터 ${size}×${size}`);
+        }
+
+        // 12. Gaussian Filter 3x3
+        function processGaussian3x3() {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = current.data;
+            const out = src.data;
+            const w = current.width;
+            const h = current.height;
+
+            // 3x3 Gaussian Kernel
+            const kernel = [
+                [1, 2, 1],
+                [2, 4, 2],
+                [1, 2, 1]
+            ];
+            const weightSum = 16;
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0;
+
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const weight = kernel[dy + 1][dx + 1];
+                            const [r, g, b] = getPixelAt(d, w, h, x + dx, y + dy);
+                            rSum += r * weight;
+                            gSum += g * weight;
+                            bSum += b * weight;
+                        }
+                    }
+
+                    const idx = (y * w + x) * 4;
+                    out[idx] = Math.round(rSum / weightSum);
+                    out[idx+1] = Math.round(gSum / weightSum);
+                    out[idx+2] = Math.round(bSum / weightSum);
+                }
+            }
+
+            pushProcessedState(src, '가우시안 3×3');
+        }
+
+        // 13. Median Filter NxN
+        function processMedianFilter(size) {
+            const current = getCurrentImage();
+            const src = cloneImageData(current);
+            const d = current.data;
+            const out = src.data;
+            const w = current.width;
+            const h = current.height;
+
+            const half = Math.floor(size / 2);
+            const midIdx = Math.floor((size * size) / 2);
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const rVals = [];
+                    const gVals = [];
+                    const bVals = [];
+
+                    for (let dy = -half; dy <= half; dy++) {
+                        for (let dx = -half; dx <= half; dx++) {
+                            const [r, g, b] = getPixelAt(d, w, h, x + dx, y + dy);
+                            rVals.push(r);
+                            gVals.push(g);
+                            bVals.push(b);
+                        }
+                    }
+
+                    rVals.sort((a, b) => a - b);
+                    gVals.sort((a, b) => a - b);
+                    bVals.sort((a, b) => a - b);
+
+                    const idx = (y * w + x) * 4;
+                    out[idx] = rVals[midIdx];
+                    out[idx+1] = gVals[midIdx];
+                    out[idx+2] = bVals[midIdx];
+                }
+            }
+
+            pushProcessedState(src, `중간값 필터 ${size}×${size}`);
+        }
+
+
+        // Event Listener Wiring
+        document.getElementById('btnRegenSample').addEventListener('click', generateSyntheticAerialSample);
+
+        // Upload custom image
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.onload = () => {
+                ctxOrig.drawImage(img, 0, 0, 256, 256);
+                originalImgData = ctxOrig.getImageData(0, 0, 256, 256);
+
+                historyStack = [{
+                    imgData: cloneImageData(originalImgData),
+                    label: '불러온 사진'
+                }];
+
+                updateResultView();
+                drawHistogram(originalImgData, ctxHistOrig, '#38bdf8');
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        // Download PNG
+        document.getElementById('btnDownload').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = `spatial_preprocessed_${Date.now()}.png`;
+            link.href = canvasResult.toDataURL('image/png');
+            link.click();
+        });
+
+        // Reset & Undo
+        document.getElementById('btnReset').addEventListener('click', () => {
+            if (historyStack.length > 1) {
+                historyStack = [historyStack[0]];
+                updateResultView();
+            }
+        });
+
+        document.getElementById('btnUndo').addEventListener('click', () => {
+            if (historyStack.length > 1) {
+                historyStack.pop();
+                updateResultView();
+            }
+        });
+
+        // Grayscale buttons
+        document.getElementById('btnGrayAvg').addEventListener('click', () => processGrayscale('avg'));
+        document.getElementById('btnGrayLum').addEventListener('click', () => processGrayscale('lum'));
+        document.getElementById('btnGrayG').addEventListener('click', () => processGrayscale('g'));
+
+        // Invert button
+        document.getElementById('btnInvert').addEventListener('click', processInvert);
+
+        // Brightness controls
+        const sliderBrightness = document.getElementById('sliderBrightness');
+        const valBrightness = document.getElementById('valBrightness');
+        sliderBrightness.addEventListener('input', (e) => {
+            valBrightness.innerText = (e.target.value >= 0 ? '+' : '') + e.target.value;
+        });
+        document.getElementById('btnApplyBrightness').addEventListener('click', () => {
+            processBrightness(parseInt(sliderBrightness.value, 10));
+        });
+
+        // Contrast controls
+        const sliderContrast = document.getElementById('sliderContrast');
+        const valContrast = document.getElementById('valContrast');
+        sliderContrast.addEventListener('input', (e) => {
+            valContrast.innerText = (e.target.value >= 0 ? '+' : '') + e.target.value;
+        });
+        document.getElementById('btnApplyContrast').addEventListener('click', () => {
+            processContrast(parseInt(sliderContrast.value, 10));
+        });
+
+        // Contrast Stretch & Equalization
+        document.getElementById('btnMinMaxStretch').addEventListener('click', processMinMaxStretch);
+        document.getElementById('btnHistEq').addEventListener('click', processHistogramEqualization);
+
+        // Binarization controls
+        const sliderThreshold = document.getElementById('sliderThreshold');
+        const valThreshold = document.getElementById('valThreshold');
+        sliderThreshold.addEventListener('input', (e) => {
+            valThreshold.innerText = `임계값: ${e.target.value}`;
+        });
+        document.getElementById('btnApplyThreshold').addEventListener('click', () => {
+            processBinarization(parseInt(sliderThreshold.value, 10));
+        });
+        document.getElementById('btnAutoThreshold').addEventListener('click', processAutoThreshold);
+
+        // Noise buttons
+        document.getElementById('btnSaltNoise').addEventListener('click', processSaltPepperNoise);
+        document.getElementById('btnGaussianNoise').addEventListener('click', processGaussianNoise);
+
+        // Filter buttons
+        document.getElementById('btnMean3').addEventListener('click', () => processMeanFilter(3));
+        document.getElementById('btnMean5').addEventListener('click', () => processMeanFilter(5));
+        document.getElementById('btnGauss3').addEventListener('click', processGaussian3x3);
+        document.getElementById('btnMedian3').addEventListener('click', () => processMedianFilter(3));
+        document.getElementById('btnMedian5').addEventListener('click', () => processMedianFilter(5));
+    </script>
+</body>
+</html>

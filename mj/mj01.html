@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>고등학교 조리 실습용 밥물 계산기</title>
+    <style>
+        /* CSS Reset & Variables for Classroom Accessibility */
+        :root {
+            --primary-color: #2b6cb0;
+            --primary-dark: #1a4971;
+            --accent-color: #dd6b20;
+            --accent-light: #feebc8;
+            --bg-color: #f7fafc;
+            --card-bg: #ffffff;
+            --text-main: #1a202c;
+            --text-muted: #4a5568;
+            --border-color: #cbd5e0;
+            --water-color: #3182ce;
+            --rice-color: #f7fafc;
+            --rice-border: #cbd5e0;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 16px;
+            font-size: 18px; /* High legibility default */
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Large Header for Classroom Displays */
+        header {
+            background: linear-gradient(135deg, #2b6cb0 0%, #1a365d 100%);
+            color: #ffffff;
+            padding: 24px 20px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+        }
+
+        header p {
+            font-size: 1.15rem;
+            opacity: 0.9;
+        }
+
+        /* Card Container Styling */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: var(--shadow-md);
+            border: 2px solid var(--border-color);
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 8px;
+        }
+
+        /* Form Controls - Extra Large for Touch & Viewing Distance */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--text-main);
+        }
+
+        select, input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 1.3rem;
+            font-weight: 600;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            background-color: #fff;
+            color: var(--text-main);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(43, 108, 176, 0.2);
+        }
+
+        .unit-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-unit {
+            padding: 14px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            background-color: #edf2f7;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn-unit.active {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            border-color: var(--primary-color);
+        }
+
+        /* Canvas Visualization Display */
+        .visual-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        canvas {
+            width: 100%;
+            max-width: 480px;
+            height: 320px;
+            background-color: #f7fafc;
+            border-radius: 16px;
+            border: 2px dashed #cbd5e0;
+        }
+
+        /* Calculated Results Display Box */
+        .result-box {
+            background-color: #ebf8ff;
+            border: 3px solid #63b3ed;
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .result-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .result-label {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+
+        .result-value {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: var(--primary-color);
+            background-color: #fff;
+            padding: 4px 16px;
+            border-radius: 12px;
+            border: 2px solid #bee3f8;
+        }
+
+        .formula-display {
+            font-size: 1.25rem;
+            font-weight: 600;
+            background-color: #ffffff;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e0;
+            color: var(--text-main);
+        }
+
+        .yield-display {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #2c5282;
+            background-color: #ebf8ff;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border-left: 5px solid var(--primary-color);
+        }
+
+        /* Lab Report One-Line Summary Box */
+        .summary-card {
+            background-color: #fefcbf;
+            border: 3px solid #f6ad55;
+        }
+
+        .summary-title {
+            color: #9c4221;
+        }
+
+        .summary-box-container {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .summary-text {
+            flex: 1;
+            font-size: 1.3rem;
+            font-weight: 800;
+            background-color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            border: 2px solid #fbd38d;
+            color: #7b341e;
+            word-break: break-all;
+            min-width: 250px;
+        }
+
+        .btn-copy {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: var(--shadow-md);
+            white-space: nowrap;
+        }
+
+        .btn-copy:hover {
+            background-color: #dd6b20;
+        }
+
+        .btn-copy:active {
+            transform: scale(0.97);
+        }
+
+        /* Collapsible Accordion Table for Heating Stages */
+        details {
+            background-color: #fff;
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        summary {
+            font-size: 1.3rem;
+            font-weight: 800;
+            padding: 18px 20px;
+            background-color: #edf2f7;
+            color: var(--primary-dark);
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            list-style: none;
+        }
+
+        summary::-webkit-details-marker {
+            display: none;
+        }
+
+        summary::after {
+            content: '▼';
+            font-size: 1rem;
+            transition: transform 0.3s;
+        }
+
+        details[open] summary::after {
+            transform: rotate(180deg);
+        }
+
+        .stage-table-wrapper {
+            padding: 16px;
+            overflow-x: auto;
+        }
+
+        .stage-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            margin-bottom: 12px;
+        }
+
+        .stage-table th, .stage-table td {
+            padding: 14px 16px;
+            border: 1px solid var(--border-color);
+            font-size: 1.1rem;
+        }
+
+        .stage-table th {
+            background-color: #e2e8f0;
+            color: var(--primary-dark);
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .stage-table td {
+            font-weight: 600;
+        }
+
+        .notice-text {
+            font-size: 1.05rem;
+            color: #c53030;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        /* Toast Popup Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background-color: #2d3748;
+            color: #ffffff;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: all 0.4s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* Footer Citation */
+        footer {
+            text-align: center;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            padding: 16px 8px;
+            border-top: 1px solid var(--border-color);
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+
+        /* Responsiveness Tweaks */
+        @media (max-width: 600px) {
+            header h1 { font-size: 1.8rem; }
+            label { font-size: 1.1rem; }
+            select, input[type="number"], input[type="text"] { font-size: 1.15rem; }
+            .result-value { font-size: 1.8rem; }
+            .summary-text { font-size: 1.15rem; }
+            .btn-copy { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>🍚 한식 조리 실습: 밥물 계산기</h1>
+        <p>쌀의 종류와 양에 맞는 정확한 밥물 양과 가열 단계를 확인하세요</p>
+    </header>
+
+    <!-- MAIN INPUT & CALCULATION SECTION -->
+    <div class="card">
+        <div class="card-title">📌 1. 쌀 재료 및 용량 입력</div>
+        <div class="form-grid">
+            
+            <!-- Rice Type Selection -->
+            <div class="form-group">
+                <label for="riceType">쌀 종류 선택</label>
+                <select id="riceType" onchange="calculateWater()">
+                    <option value="white" selected>백미 (일반 쌀)</option>
+                    <option value="new">햅쌀 (갓 수확한 쌀)</option>
+                    <option value="glutinous">찹쌀 (찰밥/약식용)</option>
+                </select>
+            </div>
+
+            <!-- Measurement Unit Toggle -->
+            <div class="form-group">
+                <label>측정 단위 선택</label>
+                <div class="unit-selector">
+                    <button type="button" class="btn-unit active" id="unitG" onclick="setUnit('g')">중량 (g)</button>
+                    <button type="button" class="btn-unit" id="unitMl" onclick="setUnit('mL')">부피 (mL)</button>
+                </div>
+            </div>
+
+            <!-- Rice Quantity Input -->
+            <div class="form-group">
+                <label for="riceAmount">쌀의 양 (<span id="unitLabelText">g</span>)</label>
+                <input type="number" id="riceAmount" value="300" min="1" step="10" placeholder="예: 300" oninput="calculateWater()">
+            </div>
+
+            <!-- Soaking Time Input -->
+            <div class="form-group">
+                <label for="soakTime">불리기 시간 (선생님 기준)</label>
+                <input type="number" id="soakTime" value="30" min="0" step="5" placeholder="예: 30" oninput="calculateWater()">
+            </div>
+
+        </div>
+    </div>
+
+    <!-- CALCULATION RESULTS & CANVAS VISUALIZER -->
+    <div class="card">
+        <div class="card-title">📊 2. 계산 결과 및 계량 가이드</div>
+        
+        <div class="result-box">
+            <div class="result-main">
+                <span class="result-label">💧 필요한 밥물 양:</span>
+                <span class="result-value" id="waterResult">450 g</span>
+            </div>
+
+            <div class="formula-display" id="formulaDisplay">
+                계산식: 300g × 1.5 = 450g
+            </div>
+
+            <div class="yield-display" id="yieldDisplay">
+                💡 다 된 밥의 예상 중량: 660 ~ 720g (쌀 중량의 2.2~2.4배)
+            </div>
+        </div>
+
+        <!-- Canvas Visual Container Display -->
+        <div class="visual-section" style="margin-top: 20px;">
+            <canvas id="potCanvas" width="480" height="320"></canvas>
+        </div>
+    </div>
+
+    <!-- ONE-LINE SUMMARY FOR LAB REPORT -->
+    <div class="card summary-card">
+        <div class="card-title summary-title">📋 3. 실습 일지 작성용 한 줄 요약</div>
+        <p style="font-weight: 600; margin-bottom: 12px; color: #7b341e;">
+            실습 일지에 아래 내용을 그대로 복사하여 적으세요:
+        </p>
+        <div class="summary-box-container">
+            <div class="summary-text" id="summaryText">
+                백미 300g → 물 450g, 불리기 30분
+            </div>
+            <button class="btn-copy" onclick="copySummaryText()">복사하기 📑</button>
+        </div>
+    </div>
+
+    <!-- COLLAPSIBLE HEATING STAGES TABLE -->
+    <details>
+        <summary>🔥 [참고] 냄비 밥짓기 가열 단계별 시간표 보기 (클릭하여 열기)</summary>
+        <div class="stage-table-wrapper">
+            <table class="stage-table">
+                <thead>
+                    <tr>
+                        <th>가열 단계</th>
+                        <th>불 조절</th>
+                        <th>소요 시간 및 상태</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>1. 온도 상승기</strong></td>
+                        <td><span style="color: #c53030; font-weight: 800;">강한 불</span></td>
+                        <td>10 ~ 15분 (물이 끓어오를 때까지)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>2. 비등기 (끓음)</strong></td>
+                        <td><span style="color: #dd6b20; font-weight: 800;">중간 불</span></td>
+                        <td>5분 (약 100℃ 유지)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>3. 증자기 (익히기)</strong></td>
+                        <td><span style="color: #2b6cb0; font-weight: 800;">약한 불</span></td>
+                        <td>15 ~ 20분 (98 ~ 100℃ 수분 흡수)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>4. 뜸 들이기</strong></td>
+                        <td><span style="color: #4a5568; font-weight: 800;">불 끄기</span></td>
+                        <td>15분 정도 (도중에 가볍게 뒤섞어 주증기 배출)</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="notice-text">※ 이 시간 및 불 조절 기준은 [냄비 취반(냄비 밥짓기)] 기준입니다.</p>
+        </div>
+    </details>
+
+    <!-- FOOTER CITATION -->
+    <footer>
+        출처: NCS 학습모듈 「한식 밥조리」(LM1301010121_21v4, 교육부·한국직업능력연구원) &lt;표 1-2&gt;, 학습 2-2·2-3
+    </footer>
+</div>
+
+<!-- TOAST MESSAGE NOTIFICATION -->
+<div id="toast" class="toast">실습 일지 요약문이 복사되었습니다!</div>
+
+<!-- JAVASCRIPT CALCULATION & CANVAS LOGIC -->
+<script>
+    let currentUnit = 'g'; // Default unit is 'g'
+
+    // Canvas Element Setup
+    const canvas = document.getElementById('potCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Ratio Standards Object as defined in standard curriculum
+    const ratios = {
+        white: { name: '백미', weight: { type: 'single', val: 1.5 }, volume: { type: 'single', val: 1.2 } },
+        new: { name: '햅쌀', weight: { type: 'single', val: 1.4 }, volume: { type: 'single', val: 1.1 } },
+        glutinous: { name: '찹쌀', weight: { type: 'range', min: 1.1, max: 1.2 }, volume: { type: 'single', val: 0.9 } }
+    };
+
+    function setUnit(unit) {
+        currentUnit = unit;
+        const btnG = document.getElementById('unitG');
+        const btnMl = document.getElementById('unitMl');
+        const unitLabelText = document.getElementById('unitLabelText');
+
+        if (unit === 'g') {
+            btnG.classList.add('active');
+            btnMl.classList.remove('active');
+            unitLabelText.innerText = 'g';
+        } else {
+            btnMl.classList.add('active');
+            btnG.classList.remove('active');
+            unitLabelText.innerText = 'mL';
+        }
+
+        calculateWater();
+    }
+
+    function calculateWater() {
+        const riceTypeKey = document.getElementById('riceType').value;
+        const riceAmountVal = parseFloat(document.getElementById('riceAmount').value) || 0;
+        const soakTimeVal = document.getElementById('soakTime').value || '0';
+
+        const selectedType = ratios[riceTypeKey];
+        const rule = currentUnit === 'g' ? selectedType.weight : selectedType.volume;
+
+        let waterStr = '';
+        let formulaStr = '';
+        let summaryWaterStr = '';
+
+        if (rule.type === 'single') {
+            const calculatedWater = Math.round((riceAmountVal * rule.val) * 10) / 10;
+            waterStr = `${calculatedWater} ${currentUnit}`;
+            summaryWaterStr = `${calculatedWater}${currentUnit}`;
+            formulaStr = `계산식: ${riceAmountVal}${currentUnit} × ${rule.val} = ${calculatedWater}${currentUnit}`;
+        } else if (rule.type === 'range') {
+            const minWater = Math.round((riceAmountVal * rule.min) * 10) / 10;
+            const maxWater = Math.round((riceAmountVal * rule.max) * 10) / 10;
+            waterStr = `${minWater} ~ ${maxWater} ${currentUnit}`;
+            summaryWaterStr = `${minWater}~${maxWater}${currentUnit}`;
+            formulaStr = `계산식: ${riceAmountVal}${currentUnit} × (${rule.min} ~ ${rule.max}) = ${minWater} ~ ${maxWater}${currentUnit}`;
+        }
+
+        // Update Water Result UI
+        document.getElementById('waterResult').innerText = waterStr;
+        document.getElementById('formulaDisplay').innerText = formulaStr;
+
+        // Yield calculation note (only for weight 'g')
+        const yieldDisplay = document.getElementById('yieldDisplay');
+        if (currentUnit === 'g' && riceAmountVal > 0) {
+            const minYield = Math.round(riceAmountVal * 2.2);
+            const maxYield = Math.round(riceAmountVal * 2.4);
+            yieldDisplay.style.display = 'block';
+            yieldDisplay.innerHTML = `💡 다 된 밥의 예상 중량: <strong>${minYield} ~ ${maxYield}g</strong> (쌀 중량의 2.2~2.4배)`;
+        } else {
+            yieldDisplay.style.display = 'none';
+        }
+
+        // One-line summary formatting for Lab Report
+        const summaryText = `${selectedType.name} ${riceAmountVal}${currentUnit} → 물 ${summaryWaterStr}, 불리기 ${soakTimeVal}분`;
+        document.getElementById('summaryText').innerText = summaryText;
+
+        // Draw dynamic visualization on Canvas
+        drawPotVisualization(riceAmountVal, rule);
+    }
+
+    function drawPotVisualization(riceVal, rule) {
+        // Clear Canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Pot Dimensions
+        const potWidth = 240;
+        const potHeight = 220;
+        const potX = (w - potWidth) / 2;
+        const potY = 50;
+
+        // Calculate water height proportion
+        let multiplier = 1.2;
+        if (rule.type === 'single') multiplier = rule.val;
+        else if (rule.type === 'range') multiplier = (rule.min + rule.max) / 2;
+
+        const maxScaleAmount = Math.max(riceVal, 800);
+        const baseRiceH = Math.min((riceVal / maxScaleAmount) * 90, 80);
+        const riceH = Math.max(baseRiceH, 35); // Minimum visual height
+        const waterH = riceH * multiplier;
+
+        // Draw Pot Background / Outline
+        ctx.save();
+
+        // Pot Gradient
+        const potGrad = ctx.createLinearGradient(potX, potY, potX + potWidth, potY + potHeight);
+        potGrad.addColorStop(0, '#ffffff');
+        potGrad.addColorStop(1, '#edf2f7');
+
+        ctx.fillStyle = potGrad;
+        ctx.strokeStyle = '#4a5568';
+        ctx.lineWidth = 4;
+
+        // Round Bottom Pot
+        ctx.beginPath();
+        ctx.moveTo(potX, potY);
+        ctx.lineTo(potX, potY + potHeight - 20);
+        ctx.quadraticCurveTo(potX, potY + potHeight, potX + 20, potY + potHeight);
+        ctx.lineTo(potX + potWidth - 20, potY + potHeight);
+        ctx.quadraticCurveTo(potX + potWidth, potY + potHeight, potX + potWidth, potY + potHeight - 20);
+        ctx.lineTo(potX + potWidth, potY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw Pot Handles
+        ctx.fillStyle = '#2d3748';
+        ctx.fillRect(potX - 22, potY + 20, 22, 12);
+        ctx.fillRect(potX + potWidth, potY + 20, 22, 12);
+
+        // Clip Pot Internal Region for Liquids and Rice
+        ctx.clip();
+
+        const bottomY = potY + potHeight;
+
+        // 1. Render Water Layer
+        const totalHeight = riceH + waterH;
+        const waterTopY = bottomY - totalHeight;
+
+        const waterGrad = ctx.createLinearGradient(0, waterTopY, 0, bottomY);
+        waterGrad.addColorStop(0, 'rgba(66, 153, 225, 0.7)');
+        waterGrad.addColorStop(1, 'rgba(43, 108, 176, 0.85)');
+
+        ctx.fillStyle = waterGrad;
+        ctx.fillRect(potX, waterTopY, potWidth, totalHeight);
+
+        // Water Wave Texture Line
+        ctx.strokeStyle = '#90cdf4';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(potX, waterTopY);
+        for (let x = potX; x <= potX + potWidth; x += 20) {
+            ctx.lineTo(x + 10, waterTopY + Math.sin(x) * 2);
+        }
+        ctx.stroke();
+
+        // 2. Render Rice Layer
+        const riceTopY = bottomY - riceH;
+        const riceGrad = ctx.createLinearGradient(0, riceTopY, 0, bottomY);
+        riceGrad.addColorStop(0, '#ffffff');
+        riceGrad.addColorStop(1, '#e2e8f0');
+
+        ctx.fillStyle = riceGrad;
+        ctx.fillRect(potX, riceTopY, potWidth, riceH);
+
+        // Rice Texture Dots
+        ctx.fillStyle = '#cbd5e0';
+        for (let rx = potX + 15; rx < potX + potWidth - 15; rx += 18) {
+            for (let ry = riceTopY + 8; ry < bottomY - 8; ry += 12) {
+                ctx.beginPath();
+                ctx.arc(rx + (ry % 5), ry, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        ctx.restore();
+
+        // Render Measurement Annotations on Canvas
+        ctx.save();
+        ctx.font = 'bold 15px Pretendard, sans-serif';
+
+        // Right side indicators: Rice Level vs Water Level
+        const textX = potX + potWidth + 10;
+
+        // Water Indicator Label
+        ctx.fillStyle = '#2b6cb0';
+        ctx.beginPath();
+        ctx.moveTo(potX + potWidth - 5, waterTopY);
+        ctx.lineTo(potX + potWidth + 35, waterTopY);
+        ctx.strokeStyle = '#3182ce';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillText(`💧 물 수위`, potX + 15, waterTopY - 8);
+
+        // Rice Indicator Label
+        ctx.fillStyle = '#2d3748';
+        ctx.fillText(`🌾 쌀 수위`, potX + 15, riceTopY - 8);
+        ctx.beginPath();
+        ctx.moveTo(potX + potWidth - 5, riceTopY);
+        ctx.lineTo(potX + potWidth + 35, riceTopY);
+        ctx.strokeStyle = '#718096';
+        ctx.stroke();
+
+        // Ratio Badge Label on Canvas Top
+        ctx.fillStyle = '#1a365d';
+        ctx.font = 'bold 16px Pretendard, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`냄비 안 계량 시각화 (비율: 1 : ${multiplier})`, w / 2, 30);
+
+        ctx.restore();
+    }
+
+    function copySummaryText() {
+        const summaryText = document.getElementById('summaryText').innerText;
+
+        // Reliable fallback clipboard copy mechanism for iframe environments
+        const textArea = document.createElement('textarea');
+        textArea.value = summaryText;
+        textArea.style.position = 'fixed'; // Prevent scroll jump
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            document.execCommand('copy');
+            showToast('실습 일지 요약문이 복사되었습니다!');
+        } catch (err) {
+            showToast('복사에 실패했습니다. 직접 드래그하여 복사해 주세요.');
+        }
+
+        document.body.removeChild(textArea);
+    }
+
+    /* Toast Notification Helper */
+    function showToast(message) {
+        const toast = document.getElementById('toast');
+        toast.innerText = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 2500);
+    }
+
+    window.onload = function() {
+        calculateWater();
+    };
+</script>
+</body>
+</html>
