@@ -1,0 +1,2224 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>나만의 신디사이저</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="자이로·초음파 센서와 카메라 AI(손 모양·몸 동작)로 연주하는 신디사이저 시뮬레이션">
+<!-- 나만의 신디사이저 v1.1 (2026-11-17, 디자인 개편) · 아두이노 코드: arduino/my_synth/my_synth.ino -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root{
+  --canvas:#E8EBF3;--paper:#FFFFFF;
+  --ink:#171A2F;--ink-2:#5D6380;--ink-3:#8A90AA;
+  --line:#E0E3EC;--line-2:#EEF0F5;--wash:#F4F5F9;
+  --blue:#2D4AC5;--blue-ink:#2340B6;--blue-wash:#ECF0FD;--blue-line:#C9D3F7;
+  --ok:#14834D;--ok-wash:#E3F8EE;--warn:#8F5B00;--err:#C2334B;
+  --body:#1B1E3D;--body-2:#242851;--screen:#0F1230;--edge:rgba(255,255,255,.08);--edge-2:rgba(255,255,255,.16);
+  --on-body:#EEF0FF;--on-body-2:#A9AED6;--on-body-3:#7A80AD;
+  --focus:#FF8A3D;
+  --display:"Black Han Sans","Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --text:"Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+}
+/* 행동마다 한 색: 패드·악기 줄·미션 카드·카메라 표시에 똑같이 써요 */
+[data-a="shake"]{--c:#F7B32B;--cg:rgba(247,179,43,.45);--cd:#946000;--cw:#FFF3D9}
+[data-a="height"]{--c:#2EC4C9;--cg:rgba(46,196,201,.45);--cd:#08777C;--cw:#DFF6F7}
+[data-a="rock"],[data-a="leftUp"]{--c:#FF6B81;--cg:rgba(255,107,129,.45);--cd:#C02D47;--cw:#FFE7EB}
+[data-a="scissors"],[data-a="rightUp"]{--c:#9D7CF7;--cg:rgba(157,124,247,.45);--cd:#5F42C8;--cw:#EFEAFF}
+[data-a="paper"],[data-a="bothUp"]{--c:#3DD68C;--cg:rgba(61,214,140,.45);--cd:#11794A;--cw:#E1F7EC}
+[data-a="one"]{--c:#5AA8FF;--cg:rgba(90,168,255,.45);--cd:#1B5DB8;--cw:#E4EFFF}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--text);-webkit-font-smoothing:antialiased;line-height:1.5}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+[hidden]{display:none !important}
+.dsp{font-family:var(--display);font-weight:800;font-synthesis:none;letter-spacing:.01em}
+
+/* ===== 작업대와 머리글 ===== */
+.app{max-width:1200px;margin:16px auto;height:calc(100vh - 32px);min-height:660px;background:var(--paper);border-radius:22px;box-shadow:0 1px 0 rgba(23,26,47,.04),0 30px 60px -36px rgba(23,26,47,.35);display:flex;flex-direction:column;overflow:hidden}
+.hd{height:64px;flex:none;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line-2)}
+.brand{font-weight:700;font-size:14px;color:#3B4252;letter-spacing:-.2px;white-space:nowrap}
+.brand i{font-style:normal;color:#F2B705}
+.vsep{width:1px;height:26px;background:var(--line);flex:none}
+.prod{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{width:34px;height:34px;flex:none}
+.logo svg{width:100%;height:100%;display:block}
+.ttl{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.ttl h1{margin:0;font-size:22px;white-space:nowrap}
+.crumb{margin-top:2px;font-size:12.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp{flex:1}
+.badge{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--wash);color:var(--ink-2);white-space:nowrap}
+.hb{height:36px;padding:0 14px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:13.5px;font-weight:600;white-space:nowrap}
+.hb:hover{background:var(--wash)}
+.bd{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;padding:16px}
+
+/* ===== 악기 본체(왼쪽, 보는 곳) ===== */
+.left{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;padding:12px;border-radius:24px;background:var(--body);color:var(--on-body);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 0 0 1px rgba(255,255,255,.03),0 22px 44px -26px rgba(27,30,61,.75)}
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 184px;grid-template-rows:minmax(0,1fr) auto;gap:10px}
+.cam{grid-column:1;grid-row:1;position:relative;min-height:240px;border-radius:16px;overflow:hidden;background:var(--screen);box-shadow:inset 0 0 0 1px var(--edge)}
+.cam canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.chips{position:absolute;top:12px;left:12px;z-index:3;display:flex;gap:6px;flex-wrap:wrap;max-width:64%}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:4px 11px 4px 9px;border-radius:999px;background:rgba(15,18,48,.74);box-shadow:inset 0 0 0 1px var(--edge-2);font-size:12px;font-weight:600;color:#E3E6FF;white-space:nowrap}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:#6F76A6}
+.chip.amber::before{background:#F7B32B}
+.chip.green::before{background:#3DD68C;box-shadow:0 0 7px rgba(61,214,140,.8)}
+.chip.blue::before{background:#8EA2FF;box-shadow:0 0 7px rgba(142,162,255,.8)}
+.tip{position:absolute;top:12px;right:12px;z-index:3;max-width:44%;padding:4px 11px;border-radius:999px;background:rgba(15,18,48,.62);font-size:12px;font-weight:600;color:#C9CEF5;text-align:right}
+.ph{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;color:#C9CEF5}
+.phicons{display:flex;gap:10px;margin-bottom:8px}
+.phicons span{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--edge),inset 0 -3px 0 rgba(0,0,0,.25);color:var(--c)}
+.phicons svg{width:34px;height:34px}
+.ph b{font-size:17px;font-weight:700;color:#fff}
+.ph small{max-width:430px;font-size:13px;color:var(--on-body-2)}
+.ph .keys{display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:5px;margin-top:6px;font-size:12.5px;color:var(--on-body-2)}
+.ph .keys span{margin-right:6px}
+kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:6px;font-family:var(--text);font-size:11.5px;font-weight:700;line-height:1;color:#fff;background:rgba(255,255,255,.1);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.18)}
+.panel kbd,.dlg kbd{color:var(--ink);background:#fff;box-shadow:inset 0 -2px 0 var(--line),inset 0 0 0 1px var(--line)}
+.mission{position:absolute;left:50%;top:52px;transform:translateX(-50%);z-index:4;width:min(92%,440px);display:flex;align-items:center;gap:14px;padding:12px 16px 14px 12px;border-radius:18px;background:#fff;color:var(--ink);box-shadow:0 18px 40px -12px rgba(0,0,0,.6)}
+.mission .mi-ico{width:60px;height:60px;flex:none;border-radius:15px;display:grid;place-items:center;background:var(--cw);color:var(--cd)}
+.mission .mi-ico svg{width:40px;height:40px}
+.mi-tx{flex:1;min-width:0}
+.mi-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}
+.mi-num{font-weight:700;color:var(--ink);background:var(--wash);border-radius:999px;padding:1px 9px}
+#miHint{display:inline-flex;flex-wrap:wrap;gap:6px}
+.mi-alt{color:var(--cd);font-weight:600}
+.mission b{display:block;margin-top:3px;font-size:24px;line-height:1.25}
+.mi-bar{height:6px;margin-top:9px;border-radius:6px;background:var(--line-2);overflow:hidden}
+.mi-bar i{display:block;width:100%;height:100%;background:var(--c);transform-origin:left center}
+.mission.ok{box-shadow:0 0 0 3px var(--c),0 18px 40px -12px rgba(0,0,0,.6)}
+.mission.ok .mi-ico{background:var(--c);color:#14162B}
+.mission.miss .mi-ico{background:var(--wash);color:var(--ink-3)}
+.burst{position:absolute;left:50%;top:62%;z-index:5;transform:translate(-50%,-50%) scale(.9);font-size:42px;color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.55);opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;white-space:nowrap}
+.burst.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.burst.good{color:#8EF0B9}
+.burst.miss{color:#D5D9F0;font-size:30px}
+.burst.count{top:56%;font-size:104px}
+
+/* 센서 모듈 */
+.kit{grid-column:2;grid-row:1/span 2;display:flex;flex-direction:column;gap:10px;min-height:0}
+.sensor{display:flex;flex-direction:column;min-height:0;padding:10px 12px;border-radius:16px;background:var(--body-2);box-shadow:inset 0 0 0 1px var(--edge),inset 0 -3px 0 rgba(0,0,0,.22);user-select:none;-webkit-user-select:none}
+.sensor h3{margin:0;display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--on-body-2)}
+.led{width:8px;height:8px;border-radius:50%;flex:none;background:#3A3F6E;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+.led.lit{background:var(--c);box-shadow:0 0 8px 1px var(--cg)}
+.readout{display:flex;align-items:baseline;gap:7px;min-height:36px;margin-top:3px;white-space:nowrap}
+.readout .big{font-size:28px;line-height:1.15;color:var(--on-body)}
+.readout .big.dim{color:var(--on-body-3)}
+.readout .unit{font-size:12px;font-weight:600;color:var(--on-body-2)}
+.sensor .hint{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:7px;font-size:11.5px;line-height:1.4;color:var(--on-body-3)}
+.us{flex:1.8}
+.gy{flex:1}
+.ladder{position:relative;flex:1;min-height:140px;margin-top:4px;border-radius:10px;background:rgba(0,0,0,.16);cursor:ns-resize;touch-action:none}
+.ladder .away{position:absolute;left:0;right:0;top:0;height:6%;min-height:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px dashed var(--edge-2);font-size:10.5px;color:var(--on-body-3);white-space:nowrap}
+.rung{position:absolute;left:0;right:0;display:flex;align-items:center;border-top:1px solid var(--edge);font-size:12px;font-weight:600;color:var(--on-body-3)}
+.rung span{width:50px;padding-right:6px;text-align:right}
+.rung.on{background:linear-gradient(90deg,var(--cg),rgba(46,196,201,0) 85%);color:#fff}
+.rung.target{box-shadow:inset 0 0 0 2px #fff;color:#fff}
+.beam{position:absolute;left:68%;bottom:0;width:0;border-left:2px dashed var(--c);opacity:.75;pointer-events:none}
+.hand{position:absolute;left:68%;width:34px;height:34px;margin:-17px 0 0 -17px;color:var(--c);filter:drop-shadow(0 0 6px var(--cg));pointer-events:none}
+.hand svg{width:100%;height:100%}
+.usbase{display:flex;justify-content:flex-end;margin-top:3px;padding-right:6%}
+.usbase svg{width:74px;height:22px}
+.gyro{position:relative;flex:1;min-height:70px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(0,0,0,.16);cursor:ew-resize;touch-action:none}
+.gyro svg{width:70px;height:52px}
+.meter{position:relative;height:10px;margin-top:9px;border-radius:2px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.1) 0 7px,rgba(0,0,0,0) 7px 10px)}
+.meter i{position:absolute;left:0;top:0;bottom:0;width:0;background:repeating-linear-gradient(90deg,var(--c) 0 7px,rgba(0,0,0,0) 7px 10px);opacity:.5}
+.meter i.over{opacity:1;filter:drop-shadow(0 0 4px var(--cg))}
+.meter b{position:absolute;top:-4px;bottom:-4px;left:50%;width:2px;margin-left:-1px;border-radius:1px;background:#fff}
+.sensor.live .ladder,.sensor.live .gyro{cursor:default}
+
+/* 소리 패드 */
+.pads{grid-column:1;grid-row:2;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.pad{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13px 6px 10px;border-radius:14px;text-align:center;background:var(--body-2);box-shadow:inset 0 0 0 1px var(--edge),inset 0 -3px 0 rgba(0,0,0,.3);transition:background-color .45s ease,box-shadow .45s ease,transform .12s ease}
+.pad::before{content:"";position:absolute;top:6px;left:50%;width:22px;height:3px;margin-left:-11px;border-radius:3px;background:var(--c);opacity:.75}
+.pad .pi{width:28px;height:28px;color:var(--c)}
+.pad .pi svg{width:100%;height:100%}
+.pad b{display:block;max-width:100%;margin-top:5px;font-size:15px;line-height:1.2;color:var(--on-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pad small{display:block;max-width:100%;margin-top:2px;font-size:11.5px;color:var(--on-body-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pad small em{font-style:normal;color:var(--c);font-weight:700}
+.pad.hit{background:var(--c);box-shadow:0 0 0 1px var(--c),0 0 28px 4px var(--cg);transform:translateY(1px) scale(1.03);transition:none}
+.pad.hit .pi,.pad.hit b,.pad.hit small em{color:#14162B}
+.pad.hit small{color:rgba(20,22,43,.72)}
+.pad.hit::before{background:#14162B;opacity:.3}
+.pad.target{box-shadow:inset 0 0 0 2px var(--c),0 0 0 4px var(--cg);animation:padPulse 1.1s ease-in-out infinite}
+@keyframes padPulse{50%{box-shadow:inset 0 0 0 2px var(--c),0 0 0 8px rgba(0,0,0,0)}}
+
+/* 계기판(결과 값) */
+.vals{flex:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-radius:14px;background:#151838;box-shadow:inset 0 0 0 1px var(--edge);overflow:hidden}
+.vals>div{min-width:0;padding:8px 14px 9px;border-left:1px solid var(--edge)}
+.vals>div:first-child{border-left:0}
+.vals small{display:block;font-size:11.5px;font-weight:600;color:var(--on-body-3)}
+.vals b{display:block;font-size:21px;line-height:1.3;color:var(--on-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vals b em{margin-left:6px;font-style:normal;font-family:var(--text);font-size:12px;font-weight:600;color:var(--on-body-2)}
+.vals b.dim{color:var(--on-body-3)}
+.vals .none,.readout .none{font-family:var(--text);font-size:14px;font-weight:600;color:var(--on-body-3)}
+.readout .none{line-height:36px}
+
+/* ===== 조작 패널(오른쪽) ===== */
+.panel{display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:20px;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.pscroll{flex:1;min-height:0;overflow:auto;background:linear-gradient(#fff 30%,rgba(255,255,255,0)) top/100% 24px no-repeat local,linear-gradient(rgba(255,255,255,0),#fff 70%) bottom/100% 24px no-repeat local,radial-gradient(farthest-side at 50% 0,rgba(23,26,47,.14),rgba(23,26,47,0)) top/100% 10px no-repeat scroll,radial-gradient(farthest-side at 50% 100%,rgba(23,26,47,.14),rgba(23,26,47,0)) bottom/100% 10px no-repeat scroll}
+.sec{padding:16px 18px;border-bottom:1px solid var(--line-2)}
+.sec:last-child{border-bottom:0}
+.sech{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sec h2{margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em}
+.desc{margin:4px 0 0;font-size:13px;color:var(--ink-2)}
+.lnk{margin-right:-6px;padding:4px 7px;border:0;border-radius:8px;background:none;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.lnk:hover{color:var(--blue);background:var(--blue-wash)}
+.drow{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;margin-top:12px}
+.dico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--wash);color:var(--ink-2)}
+.dico svg{width:18px;height:18px}
+.dtx{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dl{font-size:11.5px;font-weight:700;color:var(--ink-3)}
+.state{display:flex;align-items:center;gap:7px;min-width:0;font-size:13px;font-weight:600}
+.state span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink-3)}
+.dot.amber{background:#E7A21C}
+.dot.green{background:#2FBF78;box-shadow:0 0 0 3px rgba(47,191,120,.18)}
+.dot.blue{background:var(--blue)}
+.seg{display:inline-flex;width:max-content;padding:3px;border-radius:10px;background:var(--wash);box-shadow:inset 0 0 0 1px var(--line-2)}
+.seg button{height:28px;padding:0 12px;border:0;border-radius:8px;background:transparent;font-size:13px;font-weight:600;color:var(--ink-2)}
+.seg button[aria-checked="true"]{background:#fff;color:var(--blue);box-shadow:0 1px 2px rgba(23,26,47,.12),0 0 0 1px var(--line)}
+.seg button[disabled]{cursor:not-allowed;opacity:.55}
+.btn{height:36px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap}
+.btn:hover{background:var(--wash)}
+.btn.sm{height:32px;padding:0 11px;font-size:12.5px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn.pri{height:50px;border:0;border-radius:14px;background:var(--blue);color:#fff;font-size:15px;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 10px 22px -12px rgba(45,74,197,.8)}
+.btn.pri:hover{background:var(--blue-ink)}
+.btn.pri .gi{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.18)}
+.btn.pri .gi svg{width:10px;height:10px}
+.btn.beat{height:50px;padding:0 15px;border-radius:14px}
+.beatled{width:9px;height:9px;border-radius:50%;background:#C9CEDC;transition:background-color .25s,box-shadow .25s}
+.btn.beat.on{border-color:var(--blue-line);background:var(--blue-wash);color:var(--blue)}
+.btn.beat.on .beatled{background:var(--blue)}
+.btn.beat .beatled.flash{background:#F7B32B;box-shadow:0 0 0 4px rgba(247,179,43,.25);transition:none}
+.note{margin:10px 0 0;font-size:12.5px;color:var(--ink-2)}
+.note:empty{display:none}
+.note.warn{color:var(--warn)}
+.note.error{color:var(--err)}
+.maps{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.map{border-radius:14px;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.map.open{box-shadow:inset 0 0 0 1.5px var(--blue-line),0 8px 20px -14px rgba(23,26,47,.35)}
+.mrow{display:grid;grid-template-columns:34px minmax(0,1fr) auto 32px;align-items:center;gap:9px;padding:5px 6px 5px 7px}
+.map .mi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--cw);color:var(--cd)}
+.map .mi svg{width:24px;height:24px}
+.mt{min-width:0}
+.mt b{display:block;font-size:14px;line-height:1.25}
+.hintrow{display:flex;align-items:center;gap:4px;margin-top:2px;font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden}
+.hintrow kbd{min-width:17px;height:17px;font-size:10.5px;border-radius:5px}
+.notebadge{padding:0 5px;border-radius:6px;background:var(--cw);font-size:11px;font-weight:700;color:var(--cd)}
+.ibtn{max-width:128px;height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 7px 0 5px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:600}
+.ibtn:hover{background:var(--wash)}
+.ibtn[aria-expanded="true"]{border-color:var(--blue);background:var(--blue-wash);color:var(--blue)}
+.ig{width:24px;height:24px;flex:none;display:grid;place-items:center;border-radius:7px;background:var(--wash);color:var(--ink)}
+.ig svg{width:17px;height:17px}
+.ibtn .in{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{width:12px;height:12px;flex:none;color:var(--ink-3);transition:transform .15s}
+.ibtn[aria-expanded="true"] .chev{transform:rotate(180deg);color:var(--blue)}
+.map .play{width:32px;height:32px;padding:0;display:grid;place-items:center;border:0;border-radius:50%;background:var(--cw);color:var(--cd)}
+.map .play:hover{background:var(--c);color:#14162B}
+.map .play svg{width:11px;height:11px;margin-left:2px}
+.tray{padding:2px 10px 12px}
+.tgroup+.tgroup{margin-top:8px}
+.tg{display:block;margin:4px 2px 6px;font-size:11.5px;font-weight:700;color:var(--ink-3)}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tile{height:40px;min-width:0;display:flex;align-items:center;gap:7px;padding:0 7px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:12.5px;font-weight:600;text-align:left}
+.tile span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile:hover{border-color:var(--blue-line);background:var(--blue-wash)}
+.tile[aria-pressed="true"]{border-color:var(--blue);background:var(--blue-wash);color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+.tile[aria-pressed="true"] .ig{background:var(--blue);color:#fff}
+details.more{margin-top:12px;border-radius:12px;background:var(--wash)}
+details.more summary{display:flex;align-items:center;gap:8px;padding:9px 12px;list-style:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-2)}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"";width:6px;height:6px;margin:0 2px 2px 1px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+details.more[open] summary::before{transform:rotate(45deg);margin-bottom:4px}
+.morebody{padding:0 12px 12px}
+.set{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:13px}
+.set:first-child{margin-top:2px}
+.set input[type=range]{width:150px;accent-color:var(--blue)}
+.switch{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;cursor:pointer}
+.switch input{-webkit-appearance:none;appearance:none;position:relative;flex:none;width:38px;height:22px;margin:0;border-radius:999px;background:#D3D7E3;cursor:pointer;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
+.switch input:checked{background:var(--blue)}
+.switch input:checked::after{transform:translateX(16px)}
+.score{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.score div{padding:10px 12px;border-radius:12px;background:var(--wash)}
+.score small{display:block;font-size:12px;font-weight:600;color:var(--ink-2)}
+.score b{display:block;font-size:28px;line-height:1.2}
+.score b em{margin-left:3px;font-style:normal;font-family:var(--text);font-size:13px;font-weight:600;color:var(--ink-3)}
+.cbtns{display:flex;gap:6px;margin-top:8px}
+.q{margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--blue-wash);font-size:13px;line-height:1.55;color:#26326E}
+.q b{margin-right:6px;color:var(--blue)}
+.dock{flex:none;padding:14px 18px;border-top:1px solid var(--line-2);background:#fff}
+.dock .btns{display:flex;gap:8px}
+.dock .btns .pri{flex:1}
+.dock .msg{margin:9px 2px 0;font-size:12.5px;color:var(--ink-2)}
+.dock .msg.error{color:var(--err)}
+
+/* 도움말·알림 */
+.dlg{width:min(760px,94vw);max-height:88vh;padding:0;border:0;border-radius:20px;color:var(--ink);box-shadow:0 30px 60px -20px rgba(15,18,48,.5)}
+.dlg::backdrop{background:rgba(15,18,48,.5)}
+.dlg .dh{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid var(--line-2);background:#fff}
+.dlg .dh h2{margin:0;font-size:20px}
+.dlg .db{padding:2px 22px 24px;font-size:14px;line-height:1.65}
+.dlg h3{margin:22px 0 8px;font-size:15px}
+.dlg p{margin:6px 0}
+.dlg ol,.dlg ul{margin:6px 0;padding-left:20px}
+.dlg li{margin:3px 0}
+.dlg table{width:100%;margin-top:6px;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+.dlg th,.dlg td{padding:8px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line-2)}
+.dlg td[rowspan]{border-right:1px solid var(--line-2)}
+.dlg tr:last-child td{border-bottom:0}
+.dlg th{background:var(--wash);font-weight:700}
+.dlg code{padding:1px 6px;border-radius:6px;background:var(--wash);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+.dlg .ver{margin-top:16px;font-size:12px;color:var(--ink-3)}
+.toast{position:fixed;left:50%;top:22px;z-index:50;max-width:90vw;padding:10px 16px;border-radius:999px;background:var(--body);color:#fff;font-size:13px;font-weight:600;box-shadow:0 12px 30px -10px rgba(15,18,48,.6);opacity:0;transform:translate(-50%,-8px);transition:opacity .2s,transform .2s;pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.selftest{position:fixed;right:12px;bottom:12px;z-index:60;width:min(440px,94vw);max-height:70vh;overflow:auto;padding:10px 12px;border:2px solid var(--blue);border-radius:12px;background:#fff;font-size:12px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+.selftest .f{color:var(--err);font-weight:700}
+.cam.gaming .ph .phicons,.cam.gaming .ph b,.cam.gaming .ph small{display:none}
+.cam.gaming .ph{justify-content:flex-end;padding-bottom:18px}
+
+/* ===== 화면 크기 ===== */
+@media (max-width:1099px){
+  .app{height:auto;min-height:0;margin:0 auto;border-radius:0}
+  .bd{grid-template-columns:minmax(0,1fr) 340px}
+  .stage{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto auto}
+  .cam{grid-column:1/-1;grid-row:1;aspect-ratio:4/3;min-height:0}
+  .kit{grid-column:1/-1;grid-row:2;flex-direction:row}
+  .kit .sensor{flex:1;min-width:0}
+  .ladder{min-height:200px}
+  .pads{grid-column:1/-1;grid-row:3;grid-template-columns:repeat(3,minmax(0,1fr)) !important}
+  .panel{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px)}
+}
+@media (max-width:900px){
+  .bd{grid-template-columns:minmax(0,1fr);padding:12px}
+  .left{border-radius:20px}
+  .panel{position:static;max-height:none;overflow:visible}
+  .pscroll{overflow:visible}
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);box-shadow:0 -8px 20px rgba(23,26,47,.12)}
+  body{padding-bottom:124px}
+  .hd .badge{display:none}
+}
+@media (max-width:520px){
+  .hd{gap:10px;padding:0 12px}
+  .brand,.vsep{display:none}
+  .ttl h1{font-size:20px}
+  .left{padding:10px}
+  .vals{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .vals>div:nth-child(3){border-left:0}
+  .vals>div:nth-child(n+3){border-top:1px solid var(--edge)}
+  .tip{display:none}
+  .mission b{font-size:19px}
+  .phicons span{width:46px;height:46px}
+  .phicons svg{width:28px;height:28px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none !important;animation:none !important}
+  .pad.hit{transform:none}
+}
+</style>
+<script>window.__libs = { ml5: 'loading', tone: 'loading', hook: null };</script>
+<script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js" async onload="__libs.tone='loaded';if(__libs.hook)__libs.hook()" onerror="__libs.tone='failed';if(__libs.hook)__libs.hook()"></script>
+<script src="https://unpkg.com/ml5@1.4.0/dist/ml5.min.js" async onload="__libs.ml5='loaded';if(__libs.hook)__libs.hook()" onerror="__libs.ml5='failed';if(__libs.hook)__libs.hook()"></script>
+</head>
+<body>
+<noscript><p style="padding:20px">이 시뮬레이션은 자바스크립트가 켜져 있어야 움직여요.</p></noscript>
+<div class="app" id="app">
+  <header class="hd">
+    <div class="brand">Gyopo<i>o</i>l Edu</div>
+    <span class="vsep" aria-hidden="true"></span>
+    <div class="prod">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 34 34"><rect width="34" height="34" rx="10" fill="#1B1E3D"/><rect x="8" y="14" width="4" height="12" rx="2" fill="#2EC4C9"/><rect x="15" y="8" width="4" height="18" rx="2" fill="#F7B32B"/><rect x="22" y="11" width="4" height="15" rx="2" fill="#FF6B81"/></svg></span>
+      <div class="ttl">
+        <h1 class="dsp">나만의 신디사이저</h1>
+        <span class="crumb">센서와 카메라 AI로 연주하는 악기</span>
+      </div>
+    </div>
+    <span class="sp"></span>
+    <span class="badge" title="소리 라이브러리와 카메라 AI 모델을 인터넷에서 불러와요">인터넷 연결 필요</span>
+    <button class="hb" id="btnHelp" type="button">도움말</button>
+  </header>
+
+  <main class="bd">
+    <section class="left" aria-label="보는 곳: 악기">
+      <div class="stage" id="stage">
+        <div class="cam" id="camBox">
+          <canvas id="camCanvas" role="img" aria-label="카메라 화면과 AI가 찾은 점"></canvas>
+          <div class="chips"><span class="chip amber" id="chipKit">가상 키트(모형)</span><span class="chip" id="chipCam">카메라 꺼짐</span></div>
+          <div class="tip" id="tip"></div>
+          <div class="ph" id="camPh">
+            <div class="phicons" id="phIcons" aria-hidden="true"></div>
+            <b id="phTitle">카메라를 켜면 손 모양으로 연주해요</b>
+            <small id="phText">「카메라 켜기」를 누르고, 손바닥이 카메라를 보게 들어요.</small>
+            <span class="keys" id="phKeys"></span>
+          </div>
+          <div class="mission" id="mission" hidden>
+            <div class="mi-ico" id="miIco"></div>
+            <div class="mi-tx">
+              <div class="mi-meta"><span class="mi-num" id="miNum">1 / 8</span><span id="miHint"></span></div>
+              <b class="dsp" id="miText">-</b>
+              <div class="mi-bar"><i id="miBar"></i></div>
+            </div>
+          </div>
+          <div class="burst dsp" id="burst" aria-hidden="true"></div>
+        </div>
+
+        <div class="kit">
+          <div class="sensor us" id="usBox" data-a="height">
+            <h3><span class="led" aria-hidden="true"></span>초음파 센서</h3>
+            <div class="readout" id="usVal"><b class="big dsp dim">-</b><span class="unit">손 없음</span></div>
+            <div class="ladder" id="ladder" role="slider" tabindex="0" aria-label="초음파 센서 위 손 높이" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0" aria-valuetext="손 없음">
+              <div class="away">여기까지 올리면 손을 치워요</div>
+              <div class="beam" id="beam" hidden></div>
+              <div class="hand" id="usHand" hidden></div>
+            </div>
+            <div class="usbase" aria-hidden="true"><svg viewBox="0 0 120 34"><rect x="3" y="4" width="114" height="26" rx="5" fill="#2D6CDF"/><circle cx="34" cy="17" r="11" fill="#D5DAE3" stroke="#8C94A3" stroke-width="2"/><circle cx="34" cy="17" r="5.5" fill="#4A5160"/><circle cx="86" cy="17" r="11" fill="#D5DAE3" stroke="#8C94A3" stroke-width="2"/><circle cx="86" cy="17" r="5.5" fill="#4A5160"/></svg></div>
+            <div class="hint" id="usHint"></div>
+          </div>
+          <div class="sensor gy" id="gyBox" data-a="shake">
+            <h3><span class="led" aria-hidden="true"></span>자이로 센서</h3>
+            <div class="readout" id="gyVal"><b class="big dsp">0</b><span class="unit">°/s</span></div>
+            <div class="gyro" id="gyro" role="button" tabindex="0" aria-label="가상 자이로 센서. 좌우로 빠르게 끌거나 S 키를 눌러 흔들어요.">
+              <svg id="gyBoard" viewBox="0 0 80 60" aria-hidden="true"><rect x="4" y="4" width="72" height="52" rx="6" fill="#2D6CDF"/><rect x="28" y="16" width="24" height="22" rx="2" fill="#1F2532"/><g fill="#F2B705"><circle cx="13" cy="49" r="2.6"/><circle cx="21" cy="49" r="2.6"/><circle cx="29" cy="49" r="2.6"/><circle cx="37" cy="49" r="2.6"/><circle cx="45" cy="49" r="2.6"/><circle cx="53" cy="49" r="2.6"/><circle cx="61" cy="49" r="2.6"/><circle cx="69" cy="49" r="2.6"/></g><circle cx="12" cy="12" r="2.4" fill="#E7EBF1"/><circle cx="68" cy="12" r="2.4" fill="#E7EBF1"/></svg>
+            </div>
+            <div class="meter" aria-hidden="true"><i id="gyMeter"></i><b></b></div>
+            <div class="hint" id="gyHint"></div>
+          </div>
+        </div>
+
+        <div class="pads" id="pads" aria-label="소리 패드: 소리가 나면 빛나요"></div>
+      </div>
+
+      <div class="vals">
+        <div><small>손 높이</small><b class="dsp" id="vHeight">-</b></div>
+        <div><small>흔들기 세기</small><b class="dsp" id="vShake">-</b></div>
+        <div><small>카메라 AI</small><b class="dsp" id="vCam">-</b></div>
+        <div><small>게임</small><b class="dsp" id="vGame">-</b></div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="조작하는 곳">
+      <div class="pscroll">
+        <section class="sec" aria-labelledby="hDevice">
+          <h2 id="hDevice">장치</h2>
+          <div class="drow">
+            <span class="dico" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="13" height="9" rx="2"/><path d="M7 5.5V3.5M10 5.5V3.5M13 5.5V3.5M7 14.5v2M13 14.5v2"/><circle cx="10" cy="10" r="1.6"/></svg></span>
+            <div class="dtx"><span class="dl">센서</span><span class="state"><i class="dot amber" id="serDot"></i><span id="serText">가상 키트로 연주해요</span></span></div>
+            <button class="btn sm" id="btnSerial" type="button">아두이노 연결</button>
+          </div>
+          <div class="drow">
+            <span class="dico" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.2v7.4l-4-2.2z"/></svg></span>
+            <div class="dtx"><span class="dl">카메라 AI</span>
+              <div class="seg" id="segKind" role="radiogroup" aria-label="카메라 AI 종류">
+                <button type="button" role="radio" aria-checked="true" data-kind="hand">손 모양</button><button type="button" role="radio" aria-checked="false" data-kind="body">몸 동작</button>
+              </div>
+            </div>
+            <button class="btn sm" id="btnCam" type="button">카메라 켜기</button>
+          </div>
+          <p class="note" id="devNote" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="sec" aria-labelledby="hInst">
+          <div class="sech"><h2 id="hInst">악기 정하기</h2><button class="lnk" id="btnReset" type="button">처음대로</button></div>
+          <p class="desc">행동마다 악기를 골라요. 재생 단추로 미리 들어요.</p>
+          <ul class="maps" id="maps"></ul>
+          <details class="more" id="more">
+            <summary>설정 더 보기</summary>
+            <div class="morebody">
+              <div class="set"><label for="vol">소리 크기</label><input type="range" id="vol" min="-30" max="0" step="1" value="-6"></div>
+              <div class="set"><span id="sensLbl">흔들기 민감도</span>
+                <div class="seg" id="segSens" role="radiogroup" aria-labelledby="sensLbl">
+                  <button type="button" role="radio" aria-checked="false" data-sens="high">예민하게</button><button type="button" role="radio" aria-checked="true" data-sens="mid">보통</button><button type="button" role="radio" aria-checked="false" data-sens="low">둔하게</button>
+                </div>
+              </div>
+              <div class="set"><label class="switch">카메라 화면 숨기기(점만 보기)<input type="checkbox" id="hideVideo"></label></div>
+            </div>
+          </details>
+        </section>
+
+        <section class="sec" aria-labelledby="hCheck">
+          <h2 id="hCheck">확인</h2>
+          <div id="checkBody"></div>
+        </section>
+      </div>
+      <div class="dock">
+        <div class="btns">
+          <button class="btn pri" id="btnGame" type="button"><span class="gi" aria-hidden="true"></span><span class="bt">게임 시작</span></button>
+          <button class="btn beat" id="btnBeat" type="button" aria-pressed="false"><i class="beatled" aria-hidden="true"></i><span class="bt">박자 켜기</span></button>
+        </div>
+        <p class="msg" id="dockMsg" role="status" aria-live="polite"></p>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<dialog class="dlg" id="help" aria-labelledby="helpTitle">
+  <div class="dh"><h2 class="dsp" id="helpTitle">도움말</h2><button class="btn sm" id="btnHelpClose" type="button">닫기</button></div>
+  <div class="db">
+    <h3>이렇게 해요</h3>
+    <ol>
+      <li>「악기 정하기」에서 행동마다 어울리는 악기를 골라요. 재생 단추로 미리 들어요.</li>
+      <li>자이로 센서를 흔들고, 초음파 센서 위에서 손을 올리고 내리고, 카메라 앞에서 손 모양이나 팔 동작을 바꿔 연주해요.</li>
+      <li>「게임 시작」을 누르면 화면에 나온 행동을 6초 안에 해요. 8문제를 다 하면 맞힌 개수와 「내 연주 다시 듣기」가 나와요.</li>
+    </ol>
+    <p>아두이노와 카메라가 없어도 가상 키트(마우스)와 키보드로 모두 해 볼 수 있어요.</p>
+
+    <h3>행동을 알아채는 방법</h3>
+    <table>
+      <tr><th>행동</th><th>센서</th><th>이렇게 알아채요</th></tr>
+      <tr><td>흔들기</td><td>자이로 센서(MPU6050)</td><td>도는 빠르기(°/s)가 기준을 넘는 순간 한 번 울려요. 기준은 보통 250 °/s이고 「설정 더 보기」에서 바꿔요. 반대 방향으로 흔들면 또 울려요.</td></tr>
+      <tr><td>손 높이</td><td>초음파 센서(HC-SR04)</td><td>센서에서 손까지 5~45 cm를 5 cm씩 8칸으로 나눠요. 손이 높을수록 높은 음(도·레·미·파·솔·라·시·높은 도)이고, 칸이 바뀔 때 소리가 나요.</td></tr>
+      <tr><td>바위·가위·보·하나</td><td>카메라 AI(손의 점 21개)</td><td>손목에서 손가락 끝까지의 거리로 검지·중지·약지·새끼손가락이 펴졌는지 봐요. 엄지는 보지 않아요. 손바닥이 카메라를 보게 해요.</td></tr>
+      <tr><td>왼팔·오른팔·양팔 들기</td><td>카메라 AI(몸의 점 17개)</td><td>손목이 어깨보다 어깨너비의 0.35배 넘게 올라가면 팔을 든 것으로 봐요. 화면에 그린 점선 위로 손목을 올려요.</td></tr>
+    </table>
+    <p>손 모양은 ml5.js의 handPose, 몸 동작은 ml5.js의 bodyPose(MoveNet)가 점을 찾아요. bodyPose는 티처블 머신의 포즈넷(PoseNet)과 같은 17개 점(코·눈·귀·어깨·팔꿈치·손목·엉덩이·무릎·발목)을 찾아요.</p>
+
+    <h3>아두이노로 하기</h3>
+    <p>준비물: 아두이노 우노, 초음파 센서(HC-SR04), 자이로 센서(MPU6050), 브레드보드, 점퍼선, USB 선</p>
+    <table>
+      <tr><th>부품</th><th>부품 핀</th><th>아두이노 핀</th></tr>
+      <tr><td rowspan="4">초음파 센서</td><td>VCC</td><td>5V</td></tr>
+      <tr><td>GND</td><td>GND</td></tr>
+      <tr><td>TRIG</td><td>5번</td></tr>
+      <tr><td>ECHO</td><td>6번</td></tr>
+      <tr><td rowspan="4">자이로 센서</td><td>VCC</td><td>5V(모듈에 3.3V 전용이라고 적혀 있으면 3.3V)</td></tr>
+      <tr><td>GND</td><td>GND</td></tr>
+      <tr><td>SDA</td><td>A4</td></tr>
+      <tr><td>SCL</td><td>A5</td></tr>
+    </table>
+    <ol>
+      <li>아두이노 IDE에서 <code>arduino/my_synth/my_synth.ino</code>를 열고 보드를 「Arduino Uno」로 골라 업로드해요.</li>
+      <li>시리얼 모니터와 시리얼 플로터를 닫아요. 포트는 한 곳에서만 쓸 수 있어요.</li>
+      <li>「아두이노 연결」을 누르고 아두이노 포트를 골라요.</li>
+      <li>연결한 뒤 1초 동안 자이로 센서를 가만히 두면 영점을 맞춰요.</li>
+    </ol>
+    <p>아두이노는 25 ms마다 <code>거리cm,gx,gy,gz</code> 한 줄을 보내요(예: <code>23,-12.5,340.2,8.0</code>). 거리를 못 재면 -1이에요. 소리는 아두이노가 아니라 컴퓨터 스피커에서 나요.</p>
+    <p>초음파 센서는 위를 보게 놓고, 손바닥을 센서 위 5~45 cm에서 움직여요. 자이로 센서는 한 손으로 잡고 마라카스처럼 흔들어요.</p>
+
+    <h3>키보드로 연습하기</h3>
+    <table>
+      <tr><th>키</th><th>하는 일</th></tr>
+      <tr><td><kbd>S</kbd></td><td>한 번 흔들기</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>손 높이를 한 칸 올리기·내리기(맨 아래 칸에서 <kbd>↓</kbd>를 누르면 손을 치워요). 가상 키트일 때만 돼요.</td></tr>
+      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td><td>바위·가위·보·하나(몸 동작일 때는 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>이 왼팔·오른팔·양팔 들기). 누르고 있는 동안 그 동작을 한 것으로 봐요.</td></tr>
+    </table>
+
+    <h3>알아 두기</h3>
+    <ul>
+      <li>컴퓨터의 Chrome이나 Edge로 열어요. 아두이노 연결(Web Serial)은 이 두 브라우저에서 돼요.</li>
+      <li>소리 라이브러리(Tone.js)와 카메라 AI 모델을 인터넷에서 불러와요. 카메라 AI는 처음 켤 때 20초쯤 걸릴 수 있어요.</li>
+      <li>카메라 영상은 이 컴퓨터 안에서 점을 찾는 데만 쓰고 저장하거나 보내지 않아요.</li>
+      <li>모든 악기 소리는 컴퓨터가 만든 합성음이라 실제 악기 소리와 달라요.</li>
+      <li>새로고침하면 고른 악기와 게임 기록이 처음으로 돌아가요.</li>
+    </ul>
+    <p class="ver">나만의 신디사이저 v1.1 (2026-11-17)</p>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =====================================================================
+     1. 기본 값
+     ===================================================================== */
+  const NOTES = Object.freeze([
+    { name: '도', midi: 60 }, { name: '레', midi: 62 }, { name: '미', midi: 64 }, { name: '파', midi: 65 },
+    { name: '솔', midi: 67 }, { name: '라', midi: 69 }, { name: '시', midi: 71 }, { name: '높은 도', midi: 72 },
+  ]);
+  // 초음파: 센서에서 5~45 cm를 5 cm씩 8칸(도~높은 도). 화면 사다리는 0~50 cm를 그려요.
+  const US = Object.freeze({ near: 5, far: 45, count: 8, top: 50, margin: 1.5, hyst: 0.8 });
+  const SHAKE_LEVELS = Object.freeze({ high: 160, mid: 250, low: 400 });   // 흔들기 기준(°/s): 예민하게·보통·둔하게
+  const GAME = Object.freeze({ count: 8, limit: 6, countdown: 3, feedback: 0.9, hold: 0.3 });
+  const VIRT_K = 0.55;                    // 가상 자이로: 마우스 빠르기(px/s) × 0.55 = 도는 빠르기(°/s)
+
+  const INSTRUMENTS = Object.freeze([
+    { id: 'maracas', name: '마라카스', kind: 'perc' },
+    { id: 'tambourine', name: '탬버린', kind: 'perc' },
+    { id: 'kick', name: '큰북', kind: 'perc' },
+    { id: 'snare', name: '작은북', kind: 'perc' },
+    { id: 'clap', name: '박수', kind: 'perc' },
+    { id: 'cymbal', name: '심벌즈', kind: 'perc' },
+    { id: 'piano', name: '피아노', kind: 'pitch' },
+    { id: 'xylo', name: '실로폰', kind: 'pitch' },
+    { id: 'bell', name: '종소리', kind: 'pitch' },
+    { id: 'flute', name: '플루트', kind: 'pitch' },
+    { id: 'synth', name: '신스', kind: 'pitch' },
+    { id: 'chip', name: '8비트', kind: 'pitch' },
+  ]);
+  const INST = {};
+  INSTRUMENTS.forEach((i) => { INST[i.id] = i; });
+
+  // 행동 → 기본 악기. note는 음이 있는 악기를 골랐을 때 낼 음(NOTES 번호)
+  const ACTIONS = Object.freeze({
+    shake:    { name: '흔들기', group: 'sensor', sub: '자이로 센서', keys: 'S 키', def: 'maracas', note: 0, mission: '자이로 센서를 흔들어요' },
+    height:   { name: '손 높이', group: 'sensor', sub: '초음파 센서', keys: '↑↓ 키', def: 'piano', pitchOnly: true },
+    rock:     { name: '바위', group: 'hand', sub: '주먹', keys: '1 키', def: 'kick', note: 0, ext: [0, 0, 0, 0], mission: '바위(주먹)를 내요' },
+    scissors: { name: '가위', group: 'hand', sub: '검지·중지', keys: '2 키', def: 'clap', note: 2, ext: [1, 1, 0, 0], mission: '가위를 내요' },
+    paper:    { name: '보', group: 'hand', sub: '손바닥', keys: '3 키', def: 'cymbal', note: 4, ext: [1, 1, 1, 1], mission: '보를 내요' },
+    one:      { name: '하나', group: 'hand', sub: '검지', keys: '4 키', def: 'bell', note: 7, ext: [1, 0, 0, 0], mission: '검지 하나를 펴요' },
+    leftUp:   { name: '왼팔 들기', group: 'body', sub: '내 왼팔', keys: '1 키', def: 'kick', note: 0, mission: '왼팔을 들어요' },
+    rightUp:  { name: '오른팔 들기', group: 'body', sub: '내 오른팔', keys: '2 키', def: 'snare', note: 4, mission: '오른팔을 들어요' },
+    bothUp:   { name: '양팔 들기', group: 'body', sub: '두 팔', keys: '3 키', def: 'cymbal', note: 7, mission: '양팔을 들어요' },
+  });
+  const GROUP_ACTIONS = Object.freeze({ hand: ['rock', 'scissors', 'paper', 'one'], body: ['leftUp', 'rightUp', 'bothUp'] });
+
+  const MSG = Object.freeze({
+    noTone: '소리 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해요.',
+    toneLoading: '소리 라이브러리를 불러오는 중이에요.',
+    soundHint: '화면을 한 번 누르면 소리가 켜져요.',
+    camNoApi: '이 브라우저에서는 카메라를 쓸 수 없어요. Chrome이나 Edge로 파일을 열어요.',
+    camDenied: '카메라 사용을 허락하지 않았어요. 주소창 옆의 카메라 아이콘을 눌러 허용한 뒤 「카메라 켜기」를 다시 눌러요.',
+    camNotFound: '카메라를 찾지 못했어요. 카메라가 연결되어 있는지 확인하고 다시 눌러요.',
+    camBusy: '다른 프로그램이 카메라를 쓰고 있어요. 화상 수업 창이나 다른 카메라 화면을 닫고 다시 눌러요.',
+    camOther: '카메라를 켜지 못했어요. 새로고침한 뒤 다시 눌러요.',
+    noMl5: 'AI 라이브러리를 불러오지 못해서 카메라로 연주할 수 없어요. 인터넷 연결을 확인하고 새로고침해요. 숫자 키로는 연습할 수 있어요.',
+    ml5Loading: 'AI 라이브러리를 불러오는 중이에요. 잠시 뒤 다시 눌러요.',
+    modelFail: 'AI 모델을 불러오지 못했어요. 인터넷 연결을 확인하고 「카메라 켜기」를 다시 눌러요.',
+    detectFail: '인식 중에 문제가 생겼어요. 「카메라 켜기」를 다시 눌러요.',
+    serNoApi: '이 브라우저에서는 아두이노를 연결할 수 없어요. 컴퓨터의 Chrome이나 Edge로 파일을 열어요.',
+    serCancel: '포트를 고르지 않았어요. 「아두이노 연결」을 다시 누르고 아두이노 포트(USB Serial, CH340 등)를 골라요.',
+    serBusy: '포트를 열지 못했어요. 아두이노 IDE의 시리얼 모니터나 다른 탭이 포트를 쓰고 있으면 닫고 다시 연결해요.',
+    serNoData: '연결됐지만 값이 오지 않아요. my_synth 코드를 올렸는지 확인하고 USB를 다시 꽂아요.',
+    serStopped: '아두이노 값이 끊겼어요. USB 선을 확인해요.',
+    serLost: '아두이노 연결이 끊겼어요. USB 선을 확인하고 「아두이노 연결」을 다시 눌러요.',
+    noGyro: '자이로 센서를 찾지 못했어요. SDA는 A4, SCL은 A5에 꽂혔는지와 전원 선을 확인해요. 흔들기는 S 키로 해요.',
+  });
+
+  /* =====================================================================
+     2. 판단 규칙(화면과 떨어진 계산. #selftest가 이 부분을 시험해요)
+     ===================================================================== */
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const clamp01 = (v) => clamp(v, 0, 1);
+  const L = {};
+
+  // 손 높이: 거리(cm) → 8칸. 칸 경계에서 0.8 cm 안쪽 흔들림은 무시하고, 새 칸은 confirm번 이어서 들어와야 바꿔요.
+  L.heightBand = function (d) {
+    if (!Number.isFinite(d) || d < US.near - US.margin || d > US.far + US.margin) return -1;
+    const step = (US.far - US.near) / US.count;
+    return clamp(Math.floor((d - US.near) / step), 0, US.count - 1);
+  };
+  L.createHeightTracker = function () {
+    let cur = -1, cand = null, n = 0, since = 0;
+    const step = (US.far - US.near) / US.count;
+    return {
+      get index() { return cur; },
+      get since() { return since; },
+      reset() { cur = -1; cand = null; n = 0; since = 0; },
+      push(t, d, confirm) {
+        let r = L.heightBand(d);
+        if (cur >= 0 && r >= 0 && r !== cur) {
+          const lo = US.near + cur * step - US.hyst, hi = US.near + (cur + 1) * step + US.hyst;
+          if (d >= lo && d <= hi) r = cur;
+        }
+        if (r === cur) { cand = null; n = 0; return null; }
+        if (r === cand) n += 1; else { cand = r; n = 1; }
+        const need = (r < 0 ? 1 : 0) + Math.max(1, confirm || 1);   // 손이 사라진 것은 한 번 더 확인
+        if (n < need) return null;
+        const prev = cur;
+        cur = r; cand = null; n = 0; since = t;
+        return { prev, index: cur };
+      },
+    };
+  };
+
+  // 흔들기: 도는 빠르기(°/s)가 기준을 넘는 순간 1번. 기준의 60% 아래로 내려가거나 반대 방향으로 돌면 다시 칠 수 있어요.
+  L.createShakeDetector = function (thr) {
+    const o = { thr, rearm: 0.6, minGap: 0.06 };
+    let armed = true, lastHit = -1e9, lastVec = null;
+    return {
+      get threshold() { return o.thr; },
+      set threshold(v) { o.thr = v; },
+      reset() { armed = true; lastHit = -1e9; lastVec = null; },
+      push(t, gx, gy, gz) {
+        const mag = Math.hypot(gx, gy, gz);
+        if (!Number.isFinite(mag)) return null;
+        if (mag < o.thr * o.rearm) { armed = true; return null; }
+        let reversed = false;
+        if (lastVec) {
+          const dot = gx * lastVec[0] + gy * lastVec[1] + gz * lastVec[2];
+          const lm = Math.hypot(lastVec[0], lastVec[1], lastVec[2]) || 1;
+          if (dot < -0.3 * mag * lm) reversed = true;
+          else if (dot > 0) lastVec = [gx, gy, gz];      // 같은 쪽으로 도는 중이면 방향을 따라가요
+        }
+        if (mag < o.thr || t - lastHit < o.minGap || (!armed && !reversed)) return null;
+        armed = false; lastHit = t; lastVec = [gx, gy, gz];
+        return { mag, strength: 0.55 + 0.45 * clamp01((mag - o.thr) / (o.thr * 1.5)) };
+      },
+    };
+  };
+
+  // 손 모양: 손목~손가락 끝 거리 ÷ 손목~손가락 뿌리 거리. 펴면 약 1.9, 접으면 약 1.1(참고: 몸짓 비트 스튜디오).
+  const FINGER_IDX = [[5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]];
+  const FINGER_OPEN = [1.85, 1.95, 1.9, 1.85], FINGER_CLOSED = 1.15;
+  const HAND_CODES = Object.freeze({ '0000': 'rock', '1100': 'scissors', '1111': 'paper', '1000': 'one' });
+  L.fingerCurls = function (kp) {
+    const d = (a, b) => Math.hypot(kp[a].x - kp[b].x, kp[a].y - kp[b].y);
+    return FINGER_IDX.map((f, i) => {
+      const base = d(f[0], 0);
+      if (!(base > 0)) return 0.5;
+      return clamp01((FINGER_OPEN[i] - d(f[3], 0) / base) / (FINGER_OPEN[i] - FINGER_CLOSED));
+    });
+  };
+  L.classifyHand = function (kp) {
+    if (!Array.isArray(kp) || kp.length < 21) return { label: null, curls: null, ext: null };
+    const curls = L.fingerCurls(kp);
+    const ext = curls.map((c) => (c < 0.5 ? 1 : 0));
+    return { label: HAND_CODES[ext.join('')] || null, curls, ext };
+  };
+
+  // 몸 동작: 손목이 어깨보다 어깨너비 × 0.35 넘게 위면 든 팔. 거울 화면이라 화면 왼쪽 팔이 내 왼팔이에요.
+  // AI가 붙인 왼쪽·오른쪽 이름은 거울 화면에서 바뀔 수 있어서, 어깨와 손목 짝만 쓰고 쪽은 화면 위치로 정해요.
+  L.RAISE = 0.35;
+  L.classifyBody = function (kps, minConf) {
+    const mc = minConf == null ? 0.3 : minConf;
+    if (!Array.isArray(kps) || kps.length < 11) return { state: null, reason: 'none' };
+    const conf = (k) => (k ? (k.confidence != null ? k.confidence : (k.score != null ? k.score : 1)) : 0);
+    const A1 = { s: kps[5], w: kps[9] }, B1 = { s: kps[6], w: kps[10] };
+    if (conf(A1.s) < mc || conf(B1.s) < mc) return { state: null, reason: 'noShoulder' };
+    const sw = Math.abs(A1.s.x - B1.s.x);
+    if (sw < 20) return { state: null, reason: 'small' };
+    const up = (p) => conf(p.w) >= mc && p.w.y < p.s.y - L.RAISE * sw;
+    const [scrL, scrR] = A1.s.x < B1.s.x ? [A1, B1] : [B1, A1];
+    const lu = up(scrL), ru = up(scrR);
+    const state = lu && ru ? 'bothUp' : lu ? 'leftUp' : ru ? 'rightUp' : 'none';
+    return { state, sw, lineY: [scrL.s.y - L.RAISE * sw, scrR.s.y - L.RAISE * sw], left: scrL, right: scrR };
+  };
+  // 양팔을 들었다가 한 팔을 내리는 것은 새 동작이 아니라서 소리를 내지 않아요.
+  L.bodyShouldTrigger = function (prev, next) {
+    if (!next || next === 'none' || next === prev) return false;
+    if (prev === 'bothUp' && (next === 'leftUp' || next === 'rightUp')) return false;
+    return true;
+  };
+
+  // 흔들림 막기: 같은 결과가 frames번 이어져야 바꿔요.
+  L.createStabilizer = function (frames) {
+    let cur = null, cand, n = 0;
+    return {
+      get state() { return cur; },
+      reset() { cur = null; cand = undefined; n = 0; },
+      push(label) {
+        if (label === cur) { cand = undefined; n = 0; return null; }
+        if (label === cand) n += 1; else { cand = label; n = 1; }
+        if (n < frames) return null;
+        const prev = cur;
+        cur = label; cand = undefined; n = 0;
+        return { prev, state: cur };
+      },
+    };
+  };
+
+  // 아두이노 한 줄: "거리,gx,gy,gz"(또는 "거리,흔들기"). '#'로 시작하면 안내 문장.
+  L.parseLine = function (line) {
+    const s = String(line).replace(/\r$/, '').trim();
+    if (!s) return null;
+    if (s[0] === '#') return { info: s.slice(1).trim() };
+    const parts = s.split(',');
+    if (parts.length !== 4 && parts.length !== 2) return null;
+    if (parts.some((p) => p.trim() === '')) return null;
+    const n = parts.map(Number);
+    if (n.some((v) => !Number.isFinite(v))) return null;
+    if (n.length === 4) return { dist: n[0], gx: n[1], gy: n[2], gz: n[3] };
+    return { dist: n[0], gx: n[1], gy: 0, gz: 0 };
+  };
+
+  // 게임: 행동마다 한 번씩 섞어 내고, 남은 문제는 바로 앞과 다른 행동으로 채워요.
+  L.planMissions = function (pool, count, rng) {
+    const a = pool.slice();
+    for (let i = a.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+    const out = a.slice(0, count);
+    while (out.length < count) {
+      const prev = out[out.length - 1];
+      const choices = pool.filter((x) => x !== prev);
+      out.push(choices.length ? choices[Math.floor(rng() * choices.length)] : pool[0]);
+    }
+    return out;
+  };
+  L.createGame = function (opts) {
+    const o = Object.assign({ count: GAME.count, limit: GAME.limit, countdown: GAME.countdown, feedback: GAME.feedback, hold: GAME.hold, rng: Math.random, pool: [] }, opts);
+    const g = { phase: 'idle', score: 0, n: 0, total: o.count, mission: null, plan: [], results: [], phaseAt: 0, lastCount: 0, lastHeightTarget: -1 };
+    const camIds = o.pool.filter((x) => x !== 'shake' && x !== 'height');
+    function activate(t, ctx) {
+      let id = g.plan[g.n];
+      if (ctx && ctx.camState && ctx.camState === id) {                    // 이미 하고 있는 동작은 다른 동작으로 바꿔요
+        const alt = camIds.filter((x) => x !== id);
+        if (alt.length) id = alt[Math.floor(o.rng() * alt.length)];
+      }
+      const m = { id, at: t, target: -1 };
+      if (id === 'height') {
+        const avoid = [ctx ? ctx.heightIndex : -1, g.lastHeightTarget];
+        const choices = [];
+        for (let i = 0; i < NOTES.length; i += 1) if (avoid.indexOf(i) < 0) choices.push(i);
+        m.target = choices[Math.floor(o.rng() * choices.length)];
+        g.lastHeightTarget = m.target;
+      }
+      g.mission = m; g.phase = 'mission'; g.phaseAt = t;
+      return { type: 'mission', mission: m, index: g.n + 1, total: o.count };
+    }
+    function finish(t, ok) {
+      g.results.push({ id: g.mission.id, target: g.mission.target, ok, sec: t - g.mission.at });
+      if (ok) g.score += 1;
+      g.phase = 'feedback'; g.phaseAt = t;
+      return { type: ok ? 'success' : 'fail', mission: g.mission, score: g.score };
+    }
+    g.start = function (t) {
+      g.plan = L.planMissions(o.pool, o.count, o.rng);
+      g.phase = 'countdown'; g.phaseAt = t; g.score = 0; g.n = 0; g.results = []; g.mission = null; g.lastCount = o.countdown; g.lastHeightTarget = -1;
+      return [{ type: 'count', value: o.countdown }];
+    };
+    g.tick = function (t, ctx) {
+      const ev = [];
+      if (g.phase === 'countdown') {
+        const left = o.countdown - (t - g.phaseAt);
+        if (left <= 0) ev.push(activate(t, ctx));
+        else if (Math.ceil(left) < g.lastCount) { g.lastCount = Math.ceil(left); ev.push({ type: 'count', value: g.lastCount }); }
+      } else if (g.phase === 'mission') {
+        const m = g.mission;
+        if (m.id === 'height' && ctx && ctx.heightIndex === m.target && t - ctx.heightSince >= o.hold) ev.push(finish(t, true));
+        else if (t - m.at >= o.limit) ev.push(finish(t, false));
+      } else if (g.phase === 'feedback' && t - g.phaseAt >= o.feedback) {
+        g.n += 1;
+        if (g.n >= o.count) { g.phase = 'done'; g.mission = null; ev.push({ type: 'done', score: g.score, total: o.count }); }
+        else ev.push(activate(t, ctx));
+      }
+      return ev;
+    };
+    g.hit = function (t, id) {
+      if (g.phase !== 'mission' || !g.mission || id === 'height' || g.mission.id !== id) return [];
+      return [finish(t, true)];
+    };
+    g.timeLeft = (t) => (g.phase === 'mission' && g.mission ? Math.max(0, o.limit - (t - g.mission.at)) : 0);
+    g.running = () => g.phase === 'countdown' || g.phase === 'mission' || g.phase === 'feedback';
+    g.stop = () => { g.phase = 'idle'; g.mission = null; };
+    g.limit = o.limit;
+    return g;
+  };
+
+  /* =====================================================================
+     3. 소리(Tone.js 합성음)
+     ===================================================================== */
+  const A = (function () {
+    const st = { ready: false, starting: null, nodes: null, last: {}, beatOn: false, beatLoop: null, step: 0 };
+    const PITCHED = { piano: { o: 0, dur: 0.7 }, xylo: { o: 12, dur: 0.25 }, bell: { o: 12, dur: 1.0 }, flute: { o: 0, dur: 0.45 }, synth: { o: 0, dur: 0.32 }, chip: { o: 0, dur: 0.18 } };
+    const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    function safe(key, t) { const p = st.last[key] || 0; if (t <= p) t = p + 0.004; st.last[key] = t; return t; }
+    function now() { const T = window.Tone; return T.immediate ? T.immediate() : T.now(); }
+    function build(T) {
+      const limiter = new T.Limiter(-1).toDestination();
+      const master = new T.Volume(-6).connect(limiter);
+      const n = { master, limiter };
+      const hp = (f) => new T.Filter(f, 'highpass').connect(master);
+      n.maracas = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.07, sustain: 0, release: 0.02 }, volume: -6 }).connect(hp(5000));
+      n.tamNoise = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.04 }, volume: -10 }).connect(hp(7000));
+      n.tamMetal = new T.MetalSynth({ envelope: { attack: 0.001, decay: 0.18, release: 0.05 }, harmonicity: 5.1, modulationIndex: 20, resonance: 7000, octaves: 1, volume: -24 }).connect(master);
+      n.kick = new T.MembraneSynth({ pitchDecay: 0.04, octaves: 6, oscillator: { type: 'sine' }, envelope: { attack: 0.001, decay: 0.45, sustain: 0, release: 0.1 }, volume: -1 }).connect(master);
+      n.snNoise = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.03 }, volume: -8 }).connect(hp(1500));
+      n.snBody = new T.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 }, volume: -12 }).connect(master);
+      const clapBP = new T.Filter({ frequency: 1300, type: 'bandpass', Q: 0.9 }).connect(master);
+      n.clap = new T.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.01 }, volume: 2 }).connect(clapBP);
+      n.clapTail = new T.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.001, decay: 0.14, sustain: 0, release: 0.02 }, volume: -2 }).connect(clapBP);
+      n.cymbal = new T.MetalSynth({ envelope: { attack: 0.001, decay: 1.3, release: 0.3 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4200, octaves: 1.5, volume: -18 }).connect(master);
+      n.piano = new T.PolySynth(T.FMSynth, { harmonicity: 2, modulationIndex: 1.6, oscillator: { type: 'sine' }, modulation: { type: 'sine' }, envelope: { attack: 0.003, decay: 1.0, sustain: 0.05, release: 0.8 }, modulationEnvelope: { attack: 0.003, decay: 0.5, sustain: 0, release: 0.5 }, volume: -8 }).connect(master);
+      n.xylo = new T.PolySynth(T.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 }, volume: -6 }).connect(master);
+      n.bell = new T.PolySynth(T.FMSynth, { harmonicity: 3.01, modulationIndex: 12, oscillator: { type: 'sine' }, modulation: { type: 'sine' }, envelope: { attack: 0.001, decay: 1.4, sustain: 0, release: 1.2 }, modulationEnvelope: { attack: 0.002, decay: 0.6, sustain: 0, release: 0.5 }, volume: -14 }).connect(master);
+      const vib = new T.Vibrato(5, 0.08).connect(master);
+      n.flute = new T.PolySynth(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.06, decay: 0.1, sustain: 0.8, release: 0.35 }, volume: -6 }).connect(vib);
+      n.synth = new T.PolySynth(T.MonoSynth, { oscillator: { type: 'sawtooth' }, filter: { Q: 2, type: 'lowpass', rolloff: -24 }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.3 }, filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.3, release: 0.3, baseFrequency: 300, octaves: 3.5 }, volume: -14 }).connect(master);
+      n.chip = new T.PolySynth(T.Synth, { oscillator: { type: 'square' }, envelope: { attack: 0.002, decay: 0.12, sustain: 0.25, release: 0.08 }, volume: -18 }).connect(master);
+      // 알림음과 박자
+      n.fx = new T.PolySynth(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.002, decay: 0.18, sustain: 0, release: 0.1 }, volume: -14 }).connect(master);
+      n.bKick = new T.MembraneSynth({ pitchDecay: 0.03, octaves: 5, envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.05 }, volume: -10 }).connect(master);
+      n.bSnare = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.02 }, volume: -22 }).connect(hp(2000));
+      n.bHat = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.01 }, volume: -26 }).connect(hp(8000));
+      st.nodes = n;
+    }
+    function start() {
+      if (st.ready) return Promise.resolve(true);
+      const T = window.Tone;
+      if (!T) return Promise.resolve(false);
+      if (!st.starting) {
+        st.starting = T.start().then(() => {
+          try { T.getContext().lookAhead = 0.03; } catch (e) { /* 기본값 그대로 */ }
+          build(T);
+          st.ready = true;
+          return true;
+        }).catch(() => { st.starting = null; return false; });
+      }
+      return st.starting;
+    }
+    function play(inst, noteIdx, vel) {
+      if (!st.ready) return false;
+      const n = st.nodes;
+      const t0 = now();
+      const v = clamp(vel == null ? 0.85 : vel, 0.1, 1);
+      try {
+        switch (inst) {
+          case 'maracas': n.maracas.triggerAttackRelease(0.05, safe('maracas', t0), v); break;
+          case 'tambourine': n.tamNoise.triggerAttackRelease(0.12, safe('tamN', t0), v); n.tamMetal.triggerAttackRelease(620, 0.15, safe('tamM', t0), v * 0.8); break;
+          case 'kick': n.kick.triggerAttackRelease('C1', 0.4, safe('kick', t0), v); break;
+          case 'snare': n.snNoise.triggerAttackRelease(0.14, safe('snN', t0), v); n.snBody.triggerAttackRelease(190, 0.08, safe('snB', t0), v * 0.8); break;
+          case 'clap': {
+            let t = safe('clap', t0);
+            n.clap.triggerAttackRelease(0.008, t, v);
+            t = safe('clap', t + 0.011); n.clap.triggerAttackRelease(0.008, t, v);
+            t = safe('clap', t + 0.011); n.clap.triggerAttackRelease(0.008, t, v);
+            n.clapTail.triggerAttackRelease(0.12, safe('clapT', t + 0.008), v);
+            break;
+          }
+          case 'cymbal': n.cymbal.triggerAttackRelease(250, 1.2, safe('cym', t0), v); break;
+          default: {
+            const p = PITCHED[inst];
+            if (!p) return false;
+            const idx = clamp(noteIdx == null ? 0 : noteIdx, 0, NOTES.length - 1);
+            n[inst].triggerAttackRelease(midiHz(NOTES[idx].midi + p.o), p.dur, t0, v);
+          }
+        }
+      } catch (e) { return false; }
+      return true;
+    }
+    function fx(kind) {
+      if (!st.ready) return;
+      const t = now();
+      try {
+        if (kind === 'ok') { st.nodes.fx.triggerAttackRelease(midiHz(84), 0.12, t, 0.5); st.nodes.fx.triggerAttackRelease(midiHz(88), 0.16, t + 0.09, 0.5); }
+        else if (kind === 'miss') st.nodes.fx.triggerAttackRelease(midiHz(52), 0.22, t, 0.45);
+        else if (kind === 'count') st.nodes.fx.triggerAttackRelease(midiHz(81), 0.08, t, 0.45);
+        else if (kind === 'go') st.nodes.fx.triggerAttackRelease(midiHz(93), 0.16, t, 0.5);
+      } catch (e) { /* 알림음은 빠져도 괜찮아요 */ }
+    }
+    function setBeat(on) {
+      if (!st.ready) return false;
+      const T = window.Tone;
+      const tr = T.getTransport ? T.getTransport() : T.Transport;
+      if (on) {
+        if (!st.beatLoop) {
+          st.beatLoop = new T.Loop((time) => {
+            const s = st.step % 8;
+            st.step += 1;
+            if (s === 0 || s === 4) st.nodes.bKick.triggerAttackRelease('C1', 0.25, time, s === 0 ? 0.9 : 0.7);
+            if (s === 2 || s === 6) st.nodes.bSnare.triggerAttackRelease(0.06, time, 0.6);
+            st.nodes.bHat.triggerAttackRelease(0.02, time, s % 2 ? 0.3 : 0.55);
+            if (s % 2 === 0 && api.onBeat) { const D = T.getDraw ? T.getDraw() : T.Draw; if (D) D.schedule(api.onBeat, time); }
+          }, '8n').start(0);
+        }
+        tr.bpm.value = 90;
+        st.step = 0;
+        tr.position = 0;
+        tr.start('+0.05');
+      } else {
+        tr.stop();
+      }
+      st.beatOn = on;
+      return true;
+    }
+    function setVolume(db) { if (st.nodes) { st.nodes.master.volume.value = db; st.nodes.master.mute = db <= -30; } }
+    const api = { start, play, fx, setBeat, setVolume, onBeat: null, get ready() { return st.ready; }, get beatOn() { return st.beatOn; } };
+    return api;
+  })();
+
+  /* =====================================================================
+     4. 상태
+     ===================================================================== */
+  const $ = (s) => document.querySelector(s);
+  const nowSec = () => performance.now() / 1000;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const state = {
+    kind: 'hand', map: {}, vol: -6, sens: 'mid', hideVideo: false,
+    libs: { tone: 'loading', ml5: 'loading' }, audio: 'off', keyHeld: null, plays: 0,
+  };
+  function resetMap() { Object.keys(ACTIONS).forEach((a) => { state.map[a] = ACTIONS[a].def; }); }
+  resetMap();
+  const sensor = { mode: 'virtual', dist: NaN, gx: 0, gy: 0, gz: 0, mag: 0, signed: 0, peak: 0, peakAt: 0 };
+  const virt = { dist: NaN, vx: 0, lastMove: 0, lastX: 0, lastT: 0, dragging: false, pid: -1, burst: null, sign: 1 };
+  const height = L.createHeightTracker();
+  const shake = L.createShakeDetector(SHAKE_LEVELS.mid);
+  const handStab = L.createStabilizer(2), bodyStab = L.createStabilizer(2);
+  const debugPlays = [];
+  let game = null, rec = [], recStart = 0, best = -1, lastResult = null, replaying = false, lastRec = [], replayTimers = [];
+
+  // 게임에서 지금 문제로 나온 행동인지(양팔을 들고 있다가 한 팔을 내려 「왼팔 들기」가 된 경우도 맞힌 것으로 봐요)
+  function isMissionTarget(a) { return !!(a && game && game.phase === 'mission' && game.mission && game.mission.id === a); }
+  function camStateNow() {
+    if (state.keyHeld) return state.keyHeld;
+    if (cam.status !== 'on') return null;                 // 카메라가 꺼지거나 멈추면 마지막 인식 결과를 쓰지 않아요
+    return state.kind === 'hand' ? handStab.state : bodyStab.state;
+  }
+  function actionsNow() { return ['shake', 'height'].concat(GROUP_ACTIONS[state.kind]); }
+
+  /* =====================================================================
+     5. 그림 아이콘(이모지 대신 간단한 SVG)
+     ===================================================================== */
+  function svgHand(ext) {
+    const xs = [13.2, 18, 22.8, 27.4], tops = [6, 4, 6, 10];
+    let s = '<svg viewBox="0 0 40 40" aria-hidden="true" fill="currentColor">';
+    xs.forEach((x, i) => { const top = ext[i] ? tops[i] : 14.5; s += '<rect x="' + (x - 2.2) + '" y="' + top + '" width="4.4" height="' + (24 - top) + '" rx="2.2"/>'; });
+    s += '<rect x="10.4" y="17" width="19.6" height="16" rx="5.5"/>';
+    s += ext.every(Boolean) ? '<rect x="4.2" y="18" width="4.4" height="12" rx="2.2" transform="rotate(-38 6.4 24)"/>' : '<rect x="7.2" y="20" width="4.4" height="9" rx="2.2"/>';
+    return s + '</svg>';
+  }
+  function svgBody(lu, ru) {
+    const la = lu ? 'M20 15 L11 4' : 'M20 15 L12 25', ra = ru ? 'M20 15 L29 4' : 'M20 15 L28 25';
+    return '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><circle cx="20" cy="8" r="3.6" fill="currentColor" stroke="none"/><path d="M20 13 V26 M20 26 L14 37 M20 26 L26 37 ' + la + ' ' + ra + '"/></svg>';
+  }
+  const ICON = {
+    shake: '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="13" y="10" width="14" height="20" rx="2.5" fill="currentColor" transform="rotate(-14 20 20)"/><path d="M7 13c-3 4-3 10 0 14M33 13c3 4 3 10 0 14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+    height: '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="28" width="30" height="8" rx="2" fill="currentColor"/><path d="M12 22c5-4 11-4 16 0M8 16c7-6 17-6 24 0" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M20 3v8M16.5 6.5L20 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+  const PLAY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>';
+  const STOP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="currentColor"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 21l7 7 13-15"/></svg>';
+  const CHEV = '<svg class="chev" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"/></svg>';
+  const ACOLOR = Object.freeze({ shake: '#F7B32B', height: '#2EC4C9', rock: '#FF6B81', scissors: '#9D7CF7', paper: '#3DD68C', one: '#5AA8FF', leftUp: '#FF6B81', rightUp: '#9D7CF7', bothUp: '#3DD68C' });
+  // 악기 그림(24×24 선 그림)
+  const G = (inner) => '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  const HOLE = ' fill="currentColor" stroke="none" style="fill:var(--hole,#fff)"';
+  const IGLYPH = Object.freeze({
+    maracas: G('<ellipse cx="8" cy="7.5" rx="3.6" ry="4.6" transform="rotate(-28 8 7.5)"/><ellipse cx="16" cy="7.5" rx="3.6" ry="4.6" transform="rotate(28 16 7.5)"/><path d="M10.2 11.4L14 20.5M13.8 11.4L10 20.5"/>'),
+    tambourine: G('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.6" fill="currentColor"/><circle cx="20" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="20" r="1.6" fill="currentColor"/><circle cx="4" cy="12" r="1.6" fill="currentColor"/>'),
+    kick: G('<circle cx="12" cy="11" r="7.5"/><circle cx="12" cy="11" r="3"/><path d="M6.5 17.5L5 21M17.5 17.5L19 21"/>'),
+    snare: G('<ellipse cx="12" cy="12" rx="8" ry="2.8"/><path d="M4 12v5c0 1.6 3.6 2.8 8 2.8s8-1.2 8-2.8v-5"/><path d="M6.5 3.5l5 6.5M17.5 3.5l-5 6.5"/>'),
+    clap: G('<rect x="4.2" y="8" width="6.4" height="12" rx="3.2" transform="rotate(-16 7.4 14)"/><rect x="13.4" y="8" width="6.4" height="12" rx="3.2" transform="rotate(16 16.6 14)"/><path d="M12 2.5v2.6M8.4 3.4l1 2.1M15.6 3.4l-1 2.1"/>'),
+    cymbal: G('<ellipse cx="12" cy="8" rx="9" ry="2.6"/><path d="M12 5.4V3.6M12 10.6V21M8.5 21h7"/>'),
+    piano: G('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 12.5V19M12 12.5V19M16.5 12.5V19"/><path d="M6.2 5h2.6v7.5H6.2zM10.7 5h2.6v7.5h-2.6zM15.2 5h2.6v7.5h-2.6z" fill="currentColor" stroke="none"/>'),
+    xylo: G('<path d="M5 5v14M9.6 6.5v11M14.2 8v8M18.8 9.5v5"/><path d="M3 18.5l18-6" stroke-width="1.4"/>'),
+    bell: G('<path d="M6 16.5v-5.5a6 6 0 0 1 12 0v5.5l1.6 2H4.4z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'),
+    flute: G('<path d="M3.5 18.5L20 5.5" stroke-width="3.4"/><circle cx="9.2" cy="14" r=".9"' + HOLE + '/><circle cx="12.4" cy="11.5" r=".9"' + HOLE + '/><circle cx="15.6" cy="9" r=".9"' + HOLE + '/>'),
+    synth: G('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M6 15l4-6v6l4-6v6l4-6"/>'),
+    chip: G('<path d="M3 16h4V8h5v8h5V8h4"/>'),
+  });
+  function actionIcon(a) {
+    if (ICON[a]) return ICON[a];
+    const m = ACTIONS[a];
+    if (m.group === 'hand') return svgHand(m.ext);
+    return svgBody(a === 'leftUp' || a === 'bothUp', a === 'rightUp' || a === 'bothUp');
+  }
+
+  /* =====================================================================
+     6. 소리 내기와 알림
+     ===================================================================== */
+  function instLabel(a) {
+    const inst = INST[state.map[a]];
+    if (a === 'height' || inst.kind !== 'pitch') return inst.name;
+    return inst.name + ' <em>' + NOTES[ACTIONS[a].note].name + '</em>';
+  }
+  function trigger(a, opts) {
+    const o = opts || {};
+    ensureAudio();
+    const inst = state.map[a];
+    const note = a === 'height' ? o.note : ACTIONS[a].note;
+    const vel = o.vel == null ? 0.85 : o.vel;
+    if (A.ready) A.play(inst, note, vel);
+    else if (state.audio === 'starting') {            // 첫 동작으로 소리를 켠 경우: 켜지면 바로 내요
+      const t0 = performance.now();
+      A.start().then((ok) => { if (ok && performance.now() - t0 < 500) A.play(inst, note, vel); });
+    }
+    debugPlays.push({ a, inst, note, src: o.src || '', t: Math.round(performance.now()) });
+    if (debugPlays.length > 300) debugPlays.splice(0, 100);
+    state.plays += 1;
+    flashPad(a);
+    if (game && game.running()) {
+      rec.push({ t: nowSec() - recStart, a, inst, note, vel });
+      handleGameEvents(game.hit(nowSec(), a));
+    }
+  }
+  function flashPad(a) {
+    const el = document.querySelector('.pad[data-a="' + a + '"]');
+    if (!el) return;
+    el.classList.remove('hit');
+    void el.offsetWidth;
+    el.classList.add('hit');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('hit'), 140);
+  }
+  let toastTimer = 0;
+  function toast(text) {
+    const el = $('#toast');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+  let burstTimer = 0;
+  function burst(text, cls) {
+    const el = $('#burst');
+    el.className = 'burst ' + (cls || '');
+    el.textContent = text;
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(burstTimer);
+    burstTimer = setTimeout(() => el.classList.remove('show'), cls === 'count' ? 650 : 800);
+  }
+  function setDevNote(text, kind) {
+    const el = $('#devNote');
+    el.textContent = text || '';
+    el.className = 'note' + (kind && kind !== 'info' ? ' ' + kind : '');
+  }
+  function ensureAudio() {
+    if (state.audio === 'ready' || state.audio === 'starting') return;
+    if (state.libs.tone !== 'ready') return;
+    state.audio = 'starting';
+    A.start().then((ok) => {
+      state.audio = ok ? 'ready' : 'off';
+      if (ok) A.setVolume(state.vol);
+      renderDock();
+    });
+  }
+
+  /* =====================================================================
+     7. 화면 그리기(패널·패드)
+     ===================================================================== */
+  let openTray = '';
+  function keysHtml(a) { return Array.from(ACTIONS[a].keys.replace(' 키', '')).map((ch) => '<kbd>' + ch + '</kbd>').join(''); }
+  function renderMaps(focusSel) {
+    const ul = $('#maps');
+    ul.innerHTML = '';
+    actionsNow().forEach((a) => {
+      const m = ACTIONS[a];
+      const inst = INST[state.map[a]];
+      const open = openTray === a;
+      const note = a !== 'height' && inst.kind === 'pitch' ? '<span class="notebadge">' + NOTES[m.note].name + '</span>' : '';
+      const group = (kind, label) => '<div class="tgroup"><span class="tg">' + label + '</span><div class="tiles">' +
+        INSTRUMENTS.filter((i) => i.kind === kind).map((i) => '<button type="button" class="tile" data-i="' + i.id + '" aria-pressed="' + (state.map[a] === i.id) + '"><span class="ig">' + IGLYPH[i.id] + '</span><span>' + i.name + '</span></button>').join('') +
+        '</div></div>';
+      const li = document.createElement('li');
+      li.className = 'map' + (open ? ' open' : '');
+      li.dataset.a = a;
+      li.innerHTML = '<div class="mrow"><span class="mi">' + actionIcon(a) + '</span>' +
+        '<span class="mt"><b>' + m.name + '</b><span class="hintrow"><span>' + m.sub + '</span>' + keysHtml(a) + note + '</span></span>' +
+        '<button type="button" class="ibtn" aria-expanded="' + open + '" aria-controls="tray-' + a + '" aria-label="' + m.name + ' 악기 ' + inst.name + ', 눌러서 바꿔요"><span class="ig">' + IGLYPH[inst.id] + '</span><span class="in">' + inst.name + '</span>' + CHEV + '</button>' +
+        '<button type="button" class="play" aria-label="' + m.name + ' 소리 들어 보기">' + PLAY_ICON + '</button></div>' +
+        '<div class="tray" id="tray-' + a + '" role="group" aria-label="' + m.name + ' 악기 고르기"' + (open ? '' : ' hidden') + '>' +
+        (m.pitchOnly ? '' : group('perc', '두드리는 소리')) + group('pitch', '음이 있는 소리') + '</div>';
+      li.querySelector('.ibtn').addEventListener('click', () => {
+        openTray = open ? '' : a;
+        renderMaps(open ? '.map[data-a="' + a + '"] .ibtn' : '.map[data-a="' + a + '"] .tile[aria-pressed="true"]');
+        if (!open) { const t = document.getElementById('tray-' + a); if (t && t.scrollIntoView) t.scrollIntoView({ block: 'nearest' }); }
+      });
+      li.querySelectorAll('.tile').forEach((b) => b.addEventListener('click', () => {
+        state.map[a] = b.dataset.i;
+        openTray = '';
+        renderMaps('.map[data-a="' + a + '"] .ibtn');
+        renderPads();
+        preview(a);
+      }));
+      li.querySelector('.play').addEventListener('click', () => preview(a));
+      li.querySelector('.tray').addEventListener('keydown', (e) => trayKeys(e, a));
+      ul.appendChild(li);
+    });
+    if (focusSel) { const el = ul.querySelector(focusSel); if (el) el.focus(); }
+  }
+  function trayKeys(e, a) {               // 악기 타일: 방향키로 옮기고 Esc로 닫아요
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); openTray = ''; renderMaps('.map[data-a="' + a + '"] .ibtn'); return; }
+    const tiles = Array.from(e.currentTarget.querySelectorAll('.tile'));
+    const i = tiles.indexOf(document.activeElement);
+    if (i < 0) return;
+    const cols = (getComputedStyle(tiles[0].parentElement).gridTemplateColumns || '').split(' ').filter(Boolean).length || 3;
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    tiles[clamp(i + step, 0, tiles.length - 1)].focus();
+  }
+  document.addEventListener('pointerdown', (e) => {   // 목록 밖을 누르면 열린 악기 타일을 닫아요
+    if (openTray && !(e.target.closest && e.target.closest('#maps'))) { openTray = ''; renderMaps(); }
+  });
+  function preview(a) {
+    ensureAudio();
+    const go = () => {
+      if (!A.ready) { toast(state.libs.tone === 'failed' ? MSG.noTone : MSG.soundHint); return; }
+      if (a === 'height') {
+        [0, 2, 4, 7].forEach((ni, k) => setTimeout(() => { A.play(state.map.height, ni, 0.8); flashPad('height'); }, k * 170));
+      } else { A.play(state.map[a], ACTIONS[a].note, 0.85); flashPad(a); }
+    };
+    if (A.ready) go(); else A.start().then(() => setTimeout(go, 30));
+  }
+  function renderPads() {
+    const box = $('#pads');
+    const acts = actionsNow();
+    box.style.gridTemplateColumns = 'repeat(' + acts.length + ', minmax(0,1fr))';
+    box.innerHTML = acts.map((a) => '<div class="pad" data-a="' + a + '"><span class="pi">' + actionIcon(a) + '</span><b>' + ACTIONS[a].name + '</b><small>' + instLabel(a) + '</small></div>').join('');
+    markTargetPad();
+  }
+  function markTargetPad() {
+    const id = game && game.phase === 'mission' && game.mission ? game.mission.id : '';
+    document.querySelectorAll('.pad').forEach((p) => p.classList.toggle('target', p.dataset.a === id));
+  }
+  function buildLadder() {
+    const lad = $('#ladder');
+    const step = (US.far - US.near) / US.count;
+    for (let b = 0; b < US.count; b += 1) {
+      const hi = US.near + (b + 1) * step;
+      const r = document.createElement('div');
+      r.className = 'rung';
+      r.dataset.b = String(b);
+      r.style.top = (100 * (1 - hi / US.top)) + '%';
+      r.style.height = (100 * step / US.top) + '%';
+      r.innerHTML = '<span>' + NOTES[b].name + '</span>';
+      lad.insertBefore(r, $('#beam'));
+    }
+    $('#usHand').innerHTML = svgHand([1, 1, 1, 1]);
+  }
+
+  function renderDevice() {
+    const live = sensor.mode === 'arduino';
+    const dot = $('#serDot'), txt = $('#serText'), btn = $('#btnSerial');
+    if (ser.status === 'connecting') { dot.className = 'dot blue'; txt.textContent = '연결하는 중이에요'; }
+    else if (ser.status === 'waiting') { dot.className = 'dot blue'; txt.textContent = '연결됨, 값을 기다려요'; }
+    else if (ser.status === 'live') { dot.className = 'dot green'; txt.textContent = '아두이노 값을 받고 있어요'; }
+    else { dot.className = 'dot amber'; txt.textContent = '가상 키트로 연주해요'; }
+    btn.textContent = ser.status === 'off' ? '아두이노 연결' : '연결 끊기';
+    btn.disabled = ser.status === 'connecting';
+    const chip = $('#chipKit');
+    chip.className = 'chip ' + (live ? 'green' : 'amber');
+    chip.textContent = live ? '아두이노 연결됨' : '가상 키트(모형)';
+    $('#usBox').classList.toggle('live', live);
+    $('#gyBox').classList.toggle('live', live);
+    $('#usHint').innerHTML = live ? '아두이노 초음파 센서 값으로 움직여요' : '위아래로 끌거나 <kbd>↑</kbd><kbd>↓</kbd>';
+    $('#gyHint').innerHTML = live ? (ser.gyro === false ? '자이로 센서가 없어요. <kbd>S</kbd> 키로 흔들어요' : '흰 기준선을 넘게 흔들면 소리가 나요') : '흰 기준선을 넘게 좌우로 끌거나 <kbd>S</kbd>';
+    $('#ladder').setAttribute('aria-disabled', live ? 'true' : 'false');
+    // 카메라
+    document.querySelectorAll('#segKind button').forEach((b) => {
+      b.setAttribute('aria-checked', b.dataset.kind === state.kind ? 'true' : 'false');
+      b.disabled = !!(game && game.running());
+    });
+    const camBtn = $('#btnCam');
+    const busy = cam.status === 'starting' || cam.status === 'loading';
+    camBtn.textContent = cam.status === 'on' || busy ? '카메라 끄기' : '카메라 켜기';
+    const cc = $('#chipCam');
+    if (cam.status === 'on') { cc.className = 'chip blue'; cc.textContent = state.kind === 'hand' ? '손 모양 AI 켜짐' : '몸 동작 AI 켜짐'; }
+    else if (busy) { cc.className = 'chip'; cc.textContent = '카메라 준비 중'; }
+    else { cc.className = 'chip'; cc.textContent = '카메라 꺼짐'; }
+    // 카메라 안내 화면
+    const ph = $('#camPh');
+    ph.hidden = cam.status === 'on';
+    const camActs = GROUP_ACTIONS[state.kind];
+    $('#phIcons').innerHTML = camActs.map((a) => '<span data-a="' + a + '">' + actionIcon(a) + '</span>').join('');
+    const phKeys = '<span>카메라 없이 연습할 때</span>' + camActs.map((a) => '<span>' + keysHtml(a) + ' ' + ACTIONS[a].name.replace(' 들기', '') + '</span>').join('');
+    if (cam.status === 'starting') { $('#phTitle').textContent = '카메라를 켜는 중이에요'; $('#phText').textContent = '브라우저가 카메라 사용을 물으면 「허용」을 눌러요.'; }
+    else if (cam.status === 'loading') { $('#phTitle').textContent = (state.kind === 'hand' ? '손' : '몸') + ' 인식 AI를 불러오는 중이에요'; $('#phText').textContent = '처음 켤 때는 20초쯤 걸릴 수 있어요.'; }
+    else if (cam.status === 'error') { $('#phTitle').textContent = '카메라를 쓸 수 없어요'; $('#phText').textContent = cam.error; }
+    else {
+      $('#phTitle').textContent = state.kind === 'hand' ? '카메라를 켜면 손 모양으로 연주해요' : '카메라를 켜면 팔 동작으로 연주해요';
+      $('#phText').textContent = state.kind === 'hand' ? '「카메라 켜기」를 누르고, 손바닥이 카메라를 보게 들어요.' : '「카메라 켜기」를 누르고, 카메라에서 한두 걸음 물러나 어깨와 손이 보이게 서요.';
+    }
+    $('#phKeys').innerHTML = phKeys;
+    $('#tip').textContent = state.kind === 'hand' ? '흔들기, 손 높이, 손 모양으로 연주해요' : '흔들기, 손 높이, 팔 동작으로 연주해요';
+    $('#tip').hidden = !!(game && game.running());
+    $('#camBox').classList.toggle('gaming', !!(game && game.running()));
+  }
+  function renderDock() {
+    const btn = $('#btnGame');
+    const running = !!(game && game.running());
+    btn.querySelector('.bt').textContent = running ? '게임 그만하기' : (game && game.phase === 'done' ? '게임 다시 하기' : '게임 시작');
+    btn.querySelector('.gi').innerHTML = running ? STOP_ICON : PLAY_ICON;
+    const beat = $('#btnBeat');
+    beat.querySelector('.bt').textContent = A.beatOn ? '박자 끄기' : '박자 켜기';
+    beat.setAttribute('aria-pressed', A.beatOn ? 'true' : 'false');
+    beat.classList.toggle('on', A.beatOn);
+    const msg = $('#dockMsg');
+    msg.className = 'msg';
+    if (state.libs.tone === 'failed') { msg.textContent = MSG.noTone; msg.className = 'msg error'; }
+    else if (state.libs.tone === 'loading') msg.textContent = MSG.toneLoading;
+    else if (running) {
+      const n = game.phase === 'countdown' ? 0 : game.n + 1;
+      msg.textContent = n ? n + '번째 문제예요. 지금까지 ' + game.score + '개 맞혔어요.' : '곧 시작해요. 화면에 나온 행동을 6초 안에 해요.';
+    } else if (game && game.phase === 'done') msg.textContent = '게임이 끝났어요. 「게임 다시 하기」로 또 해요.';
+    else if (state.audio !== 'ready') msg.textContent = MSG.soundHint;
+    else msg.textContent = '자유 연주 중이에요. 행동하면 고른 악기 소리가 나요.';
+  }
+  function renderCheck() {
+    const box = $('#checkBody');
+    const q = '<p class="q"><b>질문</b>어떤 행동에 어떤 악기를 붙였을 때 가장 잘 어울렸나요? 짝에게 이유를 말해 봐요.</p>';
+    if (lastResult) {
+      const dis = lastRec.length && !replaying && !(game && game.running()) ? '' : ' disabled';
+      box.innerHTML = '<div class="score"><div><small>맞힌 개수</small><b class="dsp">' + lastResult.score + '<em>/ ' + lastResult.total + '</em></b></div><div><small>오늘 최고 기록</small><b class="dsp">' + best + '<em>/ ' + lastResult.total + '</em></b></div></div>' +
+        '<div class="cbtns"><button class="btn sm" id="btnReplay" type="button"' + dis + '>' + (replaying ? '다시 듣는 중이에요' : '내 연주 다시 듣기') + '</button></div>' + q;
+      const rb = $('#btnReplay');
+      if (rb) rb.addEventListener('click', replay);
+    } else {
+      box.innerHTML = '<p class="desc" style="margin-top:0">게임을 하면 맞힌 개수가 여기에 나와요.</p>' + q;
+    }
+  }
+  function renderAll() { renderDevice(); renderDock(); }
+
+  /* =====================================================================
+     8. 가상 키트(마우스·키보드로 센서 흉내)
+     ===================================================================== */
+  const ladder = $('#ladder'), gyroEl = $('#gyro');
+  function ladderDist(clientY) {
+    const r = ladder.getBoundingClientRect();
+    const d = US.top * (1 - (clientY - r.top) / r.height);
+    if (d > US.far + US.margin + 0.5) return NaN;        // 맨 위 칸: 손을 치워요
+    return clamp(d, US.near, US.far + US.margin);
+  }
+  ladder.addEventListener('pointerdown', (e) => {
+    if (sensor.mode !== 'virtual' || !e.isPrimary || e.button !== 0) return;
+    ensureAudio();
+    ladder.setPointerCapture(e.pointerId);
+    virt.dist = ladderDist(e.clientY);
+    e.preventDefault();
+  });
+  ladder.addEventListener('pointermove', (e) => {
+    if (sensor.mode !== 'virtual' || !ladder.hasPointerCapture(e.pointerId)) return;
+    virt.dist = ladderDist(e.clientY);
+  });
+  ladder.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') return;   // 아래 공통 키 처리에서 해요
+    if (e.key === 'Home') { stepHeightTo(US.count - 1); e.preventDefault(); }
+    if (e.key === 'End') { stepHeightTo(0); e.preventDefault(); }
+  });
+  function stepHeightTo(b) { if (sensor.mode === 'virtual') virt.dist = b < 0 ? NaN : US.near + b * 5 + 2.5; }
+  function stepHeight(dir) {
+    if (sensor.mode !== 'virtual') return;
+    const b = L.heightBand(virt.dist);
+    if (b < 0) { if (dir > 0) stepHeightTo(0); return; }
+    const nb = b + dir;
+    stepHeightTo(nb < 0 ? -1 : Math.min(US.count - 1, nb));
+  }
+  gyroEl.addEventListener('pointerdown', (e) => {
+    if (sensor.mode !== 'virtual' || !e.isPrimary || e.button !== 0) return;
+    ensureAudio();
+    gyroEl.setPointerCapture(e.pointerId);
+    virt.pid = e.pointerId;
+    virt.dragging = true; virt.lastX = e.clientX; virt.lastT = e.timeStamp; virt.vx = 0;
+    e.preventDefault();
+  });
+  gyroEl.addEventListener('pointermove', (e) => {
+    if (!virt.dragging || sensor.mode !== 'virtual' || e.pointerId !== virt.pid) return;
+    if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) { virt.dragging = false; return; }
+    // 화면이 느려도 놓치지 않게 프레임 사이의 움직임(coalesced)까지 하나씩 판정해요
+    const list = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+    (list.length ? list : [e]).forEach((ev) => {
+      const dt = (ev.timeStamp - virt.lastT) / 1000;
+      if (!(dt > 0.002)) return;
+      const v = (ev.clientX - virt.lastX) / dt;
+      virt.vx = virt.vx * 0.4 + v * 0.6;
+      virt.lastX = ev.clientX; virt.lastT = ev.timeStamp;
+      const gx = clamp(virt.vx * VIRT_K, -1600, 1600);
+      notePeak(ev.timeStamp / 1000, Math.abs(gx));
+      feedShake(ev.timeStamp / 1000, gx, 0, 0);
+    });
+    virt.lastMove = nowSec();
+  });
+  const endDrag = () => { virt.dragging = false; };
+  gyroEl.addEventListener('pointerup', endDrag);
+  gyroEl.addEventListener('pointercancel', endDrag);
+  gyroEl.addEventListener('lostpointercapture', endDrag);
+  gyroEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!e.repeat) virtualShake(); } });
+  function virtualShake() {
+    ensureAudio();
+    if (sensor.mode === 'virtual') { virt.sign = -virt.sign; virt.burst = { sign: virt.sign, until: nowSec() + 0.09, fed: 0 }; }
+    else trigger('shake', { vel: 0.8, src: 'key' });
+  }
+
+  /* =====================================================================
+     9. 키보드
+     ===================================================================== */
+  function keyAction(a, down) {
+    if (down) {
+      const prev = camStateNow();
+      state.keyHeld = a;
+      const fire = state.kind === 'body' ? (L.bodyShouldTrigger(prev, a) || isMissionTarget(a)) : prev !== a;
+      if (fire) trigger(a, { src: 'key' });
+    } else if (state.keyHeld === a) state.keyHeld = null;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    if ($('#help').open) return;
+    const tg = e.target;
+    const tag = tg && tg.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (tg && tg.getAttribute && tg.getAttribute('role') === 'radio')) return;
+    const code = e.code;
+    if (code === 'KeyS') { if (!e.repeat) virtualShake(); e.preventDefault(); return; }
+    if (code === 'ArrowUp' || code === 'ArrowDown') {
+      if (sensor.mode === 'virtual') { ensureAudio(); stepHeight(code === 'ArrowUp' ? 1 : -1); e.preventDefault(); }
+      return;
+    }
+    const m = /^(Digit|Numpad)([1-4])$/.exec(code);
+    if (m) {
+      const a = GROUP_ACTIONS[state.kind][Number(m[2]) - 1];
+      if (a && !e.repeat) { ensureAudio(); keyAction(a, true); }
+      if (a) e.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    const m = /^(Digit|Numpad)([1-4])$/.exec(e.code);
+    if (m) { const a = GROUP_ACTIONS[state.kind][Number(m[2]) - 1]; if (a) keyAction(a, false); }
+  });
+  window.addEventListener('blur', () => { state.keyHeld = null; virt.dragging = false; });
+  document.addEventListener('pointerdown', () => ensureAudio(), { capture: true });
+
+  /* =====================================================================
+     10. 카메라와 AI(ml5 handPose · bodyPose)
+     ===================================================================== */
+  const DW = 640, DH = 480;
+  const video = document.createElement('video');
+  video.playsInline = true; video.muted = true; video.setAttribute('playsinline', '');
+  const det = document.createElement('canvas');
+  det.width = DW; det.height = DH;
+  const detCtx = det.getContext('2d');
+  const cam = { status: 'off', stream: null, models: {}, modelPromises: {}, token: 0, det: null, error: '', frames: 0 };
+  let backendPromise = null;
+  function ensureBackend() {
+    if (!backendPromise) {
+      backendPromise = (async () => {
+        const lib = window.ml5;
+        try { lib.setBackend('webgl'); } catch (e) { /* 아래에서 확인해요 */ }
+        try { await lib.tf.ready(); } catch (e) { /* 아래에서 확인해요 */ }
+        if (lib.tf.getBackend() !== 'webgl') { try { lib.setBackend('cpu'); await lib.tf.ready(); } catch (e) { /* 그대로 둬요 */ } }
+        return lib.tf.getBackend() || '';
+      })();
+    }
+    return backendPromise;
+  }
+  function loadModel(kind) {
+    if (cam.models[kind]) return Promise.resolve(cam.models[kind]);
+    if (!cam.modelPromises[kind]) {
+      cam.modelPromises[kind] = (async () => {
+        await ensureBackend();
+        let m = kind === 'hand'
+          ? window.ml5.handPose({ maxHands: 1 })
+          : window.ml5.bodyPose('MoveNet', { modelType: 'SINGLEPOSE_LIGHTNING' });
+        if (m && typeof m.then === 'function') m = await m;          // p5가 없는 페이지에서는 Promise처럼 올 수 있어요
+        if (m && m.ready) await m.ready;
+        if (!m || typeof m.detect !== 'function') throw new Error('model');
+        cam.models[kind] = m;
+        return m;
+      })().catch((e) => { cam.modelPromises[kind] = null; throw e; });
+    }
+    return cam.modelPromises[kind];
+  }
+  function camErrorText(e) {
+    const n = e && e.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') return MSG.camDenied;
+    if (n === 'NotFoundError' || n === 'OverconstrainedError' || n === 'DevicesNotFoundError') return MSG.camNotFound;
+    if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') return MSG.camBusy;
+    return MSG.camOther;
+  }
+  function videoCrop() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    const target = DW / DH;
+    let sw = vw, sh = vh, sx = 0, sy = 0;
+    if (vw / vh > target) { sw = vh * target; sx = (vw - sw) / 2; } else { sh = vw / target; sy = (vh - sh) / 2; }
+    return { sx, sy, sw, sh };
+  }
+  async function startCamera() {
+    if (cam.status === 'starting' || cam.status === 'loading' || cam.status === 'on') return;
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') { cam.status = 'error'; cam.error = MSG.camNoApi; setDevNote(MSG.camNoApi, 'error'); renderAll(); return; }
+    if (state.libs.ml5 === 'failed') { setDevNote(MSG.noMl5, 'error'); return; }
+    if (state.libs.ml5 !== 'ready') { setDevNote(MSG.ml5Loading, 'warn'); return; }
+    const token = ++cam.token;
+    cam.status = 'starting'; cam.error = '';
+    setDevNote('카메라를 켜는 중이에요. 브라우저가 카메라 사용을 물으면 「허용」을 눌러요.');
+    renderAll();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false });
+    } catch (e) {
+      if (token !== cam.token) return;
+      cam.status = 'error'; cam.error = camErrorText(e);
+      setDevNote(cam.error, 'error');
+      renderAll();
+      return;
+    }
+    if (token !== cam.token) { stream.getTracks().forEach((t) => t.stop()); return; }
+    cam.stream = stream;
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) { /* 소리 없는 영상은 보통 바로 재생돼요 */ }
+    if (token !== cam.token) return;
+    runDetection(token);
+  }
+  async function runDetection(token) {
+    const kind = state.kind;
+    cam.status = 'loading'; cam.det = null;
+    handStab.reset(); bodyStab.reset();
+    setDevNote((kind === 'hand' ? '손' : '몸') + ' 인식 AI를 불러오는 중이에요.');
+    renderAll();
+    let model;
+    try { model = await loadModel(kind); } catch (e) {
+      if (token !== cam.token) return;
+      stopStream();
+      cam.status = 'error'; cam.error = MSG.modelFail;
+      setDevNote(MSG.modelFail, 'error');
+      renderAll();
+      return;
+    }
+    if (token !== cam.token) return;
+    cam.status = 'on';
+    setDevNote(kind === 'hand' ? '손을 찾고 있어요. 손바닥이 카메라를 보게 들어요.' : '몸을 찾고 있어요. 어깨와 두 손이 화면에 들어오게 서요.');
+    renderAll();
+    detectLoop(token, kind, model);
+  }
+  function stopStream() {
+    if (cam.stream) cam.stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) { /* 무시 */ } });
+    cam.stream = null;
+    try { video.pause(); } catch (e) { /* 무시 */ }
+    video.srcObject = null;
+  }
+  function stopCamera() {
+    cam.token += 1;
+    stopStream();
+    cam.status = 'off'; cam.error = ''; cam.det = null;
+    handStab.reset(); bodyStab.reset();
+    setDevNote('카메라를 껐어요.');
+    renderAll();
+  }
+  async function detectLoop(token, kind, model) {
+    let errors = 0;
+    while (cam.token === token) {
+      const crop = videoCrop();
+      if (!crop || video.readyState < 2) { await wait(60); continue; }
+      detCtx.save();
+      detCtx.translate(DW, 0);
+      detCtx.scale(-1, 1);
+      detCtx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, DW, DH);
+      detCtx.restore();
+      let res;
+      try {
+        res = await model.detect(det);
+        errors = 0;
+      } catch (e) {
+        errors += 1;
+        if (errors >= 5) {
+          if (cam.token === token) {
+            cam.token += 1;
+            stopStream();
+            handStab.reset(); bodyStab.reset(); cam.det = null;
+            cam.status = 'error'; cam.error = MSG.detectFail;
+            setDevNote(MSG.detectFail, 'error');
+            renderAll();
+          }
+          return;
+        }
+        await wait(200);
+        continue;
+      }
+      if (cam.token !== token) return;
+      onDetect(kind, Array.isArray(res) ? res : []);
+      cam.frames += 1;
+      await nextFrame();
+    }
+  }
+  function onDetect(kind, res) {
+    const r = res[0];
+    if (kind === 'hand') {
+      const ok = r && Array.isArray(r.keypoints) && r.keypoints.length >= 21 && (r.confidence == null || r.confidence >= 0.5);
+      if (!ok) { cam.det = { kind, kp: null, label: null }; feedCam(null); return; }
+      const kp = r.keypoints.map((k) => ({ x: k.x, y: k.y }));
+      const c = L.classifyHand(kp);
+      cam.det = { kind, kp, label: c.label, ext: c.ext };
+      feedCam(c.label);
+    } else {
+      const kps = r && Array.isArray(r.keypoints) ? r.keypoints : null;
+      const c = kps ? L.classifyBody(kps) : { state: null };
+      cam.det = { kind, kps, body: c };
+      feedCam(c.state && c.state !== 'none' ? c.state : null);
+    }
+  }
+  function feedCam(label) {
+    if (state.kind === 'hand') {
+      const ch = handStab.push(label);
+      if (ch && ch.state && !state.keyHeld) trigger(ch.state, { src: 'camera' });
+    } else {
+      const ch = bodyStab.push(label);
+      if (ch && (L.bodyShouldTrigger(ch.prev, ch.state) || isMissionTarget(ch.state)) && !state.keyHeld) trigger(ch.state, { src: 'camera' });
+    }
+  }
+
+  const camCanvas = $('#camCanvas'), cctx = camCanvas.getContext('2d');
+  const HAND_LINKS = [[0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [0, 9, 10, 11, 12], [0, 13, 14, 15, 16], [0, 17, 18, 19, 20], [5, 9, 13, 17]];
+  const BODY_LINKS = [[5, 6], [5, 7], [7, 9], [6, 8], [8, 10], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+  function drawCam() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cw = Math.max(1, Math.round(camCanvas.clientWidth * dpr)), ch = Math.max(1, Math.round(camCanvas.clientHeight * dpr));
+    if (camCanvas.width !== cw || camCanvas.height !== ch) { camCanvas.width = cw; camCanvas.height = ch; }
+    cctx.fillStyle = '#0F1230';
+    cctx.fillRect(0, 0, cw, ch);
+    if (cam.status !== 'on') return;
+    const s = Math.min(cw / DW, ch / DH), w = DW * s, h = DH * s, x0 = (cw - w) / 2, y0 = (ch - h) / 2;
+    const crop = videoCrop();
+    if (!state.hideVideo && crop && video.readyState >= 2) {
+      cctx.save();
+      cctx.translate(x0 + w, y0);
+      cctx.scale(-1, 1);
+      cctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, w, h);
+      cctx.restore();
+      cctx.fillStyle = 'rgba(15,18,48,.2)';
+      cctx.fillRect(x0, y0, w, h);
+    } else {
+      cctx.strokeStyle = 'rgba(255,255,255,.08)';
+      cctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+    }
+    const P = (k) => [x0 + k.x * s, y0 + k.y * s];
+    const d = cam.det;
+    if (!d) return;
+    cctx.lineCap = 'round';
+    if (d.kind === 'hand' && d.kp) {
+      const fingerOf = (i) => (i >= 5 ? Math.floor((i - 5) / 4) : -1);
+      const hc = handStab.state ? ACOLOR[handStab.state] : '';
+      HAND_LINKS.forEach((ln) => {
+        for (let i = 1; i < ln.length; i += 1) {
+          const f = fingerOf(ln[i]);
+          const on = f >= 0 && d.ext ? d.ext[f] : 0;
+          cctx.strokeStyle = f < 0 || ln[0] === 5 ? 'rgba(255,255,255,.7)' : (on ? (hc || '#B9C6FF') : '#6F76A6');
+          cctx.lineWidth = 3 * dpr;
+          const a = P(d.kp[ln[i - 1]]), b = P(d.kp[ln[i]]);
+          cctx.beginPath(); cctx.moveTo(a[0], a[1]); cctx.lineTo(b[0], b[1]); cctx.stroke();
+        }
+      });
+      d.kp.forEach((k, i) => {
+        const p = P(k);
+        cctx.fillStyle = i === 0 ? (hc || '#FFD166') : '#fff';
+        cctx.beginPath(); cctx.arc(p[0], p[1], (i % 4 === 0 ? 4.5 : 3) * dpr, 0, Math.PI * 2); cctx.fill();
+      });
+      const lbl = handStab.state ? ACTIONS[handStab.state].name : (d.label ? ACTIONS[d.label].name : '모르는 모양');
+      tag(P(d.kp[0])[0], P(d.kp[0])[1] + 26 * dpr, lbl, dpr, hc);
+    } else if (d.kind === 'body' && d.kps) {
+      const ok = (k) => k && (k.confidence == null || k.confidence >= 0.3);
+      const b = d.body || {};
+      if (b.left && b.right && b.lineY) {
+        cctx.setLineDash([8 * dpr, 6 * dpr]);
+        cctx.strokeStyle = 'rgba(255,255,255,.55)';
+        cctx.lineWidth = 2 * dpr;
+        [b.left, b.right].forEach((pair, i) => {
+          const ly = y0 + b.lineY[i] * s, lx = x0 + pair.s.x * s;
+          cctx.beginPath(); cctx.moveTo(lx - 46 * dpr, ly); cctx.lineTo(lx + 46 * dpr, ly); cctx.stroke();
+        });
+        cctx.setLineDash([]);
+      }
+      BODY_LINKS.forEach(([i, j]) => {
+        const a = d.kps[i], c = d.kps[j];
+        if (!ok(a) || !ok(c)) return;
+        cctx.strokeStyle = 'rgba(255,255,255,.75)';
+        cctx.lineWidth = 3 * dpr;
+        const p = P(a), q = P(c);
+        cctx.beginPath(); cctx.moveTo(p[0], p[1]); cctx.lineTo(q[0], q[1]); cctx.stroke();
+      });
+      d.kps.forEach((k, i) => {
+        if (!ok(k) || i < 5) return;
+        const p = P(k);
+        const wrist = i === 9 || i === 10;
+        cctx.fillStyle = wrist ? (bodyStab.state ? ACOLOR[bodyStab.state] : '#FFD166') : '#fff';
+        cctx.beginPath(); cctx.arc(p[0], p[1], (wrist ? 6 : 3.5) * dpr, 0, Math.PI * 2); cctx.fill();
+      });
+      const nose = d.kps[0];
+      const st = bodyStab.state;
+      const lbl = st ? ACTIONS[st].name : (b.state === null ? '몸이 안 보여요' : '팔을 내렸어요');
+      if (ok(nose)) { const p = P(nose); tag(p[0], p[1] - 34 * dpr, lbl, dpr, st ? ACOLOR[st] : ''); }
+      else tag(x0 + w / 2, y0 + 30 * dpr, lbl, dpr, st ? ACOLOR[st] : '');
+    }
+  }
+  function tag(x, y, text, dpr, color) {   // color가 있으면 그 행동 색으로 칠해요
+    cctx.font = '700 ' + (15 * dpr) + 'px "Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+    const tw = cctx.measureText(text).width, pad = 10 * dpr, hh = 28 * dpr;
+    const bx = clamp(x - tw / 2 - pad, 4, camCanvas.width - tw - pad * 2 - 4), by = clamp(y - hh / 2, 4, camCanvas.height - hh - 4);
+    cctx.fillStyle = color || 'rgba(15,18,48,.78)';
+    cctx.beginPath();
+    if (cctx.roundRect) cctx.roundRect(bx, by, tw + pad * 2, hh, hh / 2); else cctx.rect(bx, by, tw + pad * 2, hh);
+    cctx.fill();
+    cctx.fillStyle = color ? '#14162B' : '#fff';
+    cctx.textBaseline = 'middle';
+    cctx.fillText(text, bx + pad, by + hh / 2 + 1);
+  }
+
+  /* =====================================================================
+     11. 아두이노(Web Serial, 115200)
+     ===================================================================== */
+  const ser = { status: 'off', port: null, reader: null, buf: '', lines: 0, lastData: 0, connectAt: 0, gyro: null, warned: '' };
+  const SOFT_SERIAL_ERRORS = ['BreakError', 'FramingError', 'ParityError', 'BufferOverrunError'];
+  async function connectSerial() {
+    if (ser.status !== 'off') return;
+    const api = navigator.serial;
+    if (!api || typeof api.requestPort !== 'function') { setDevNote(MSG.serNoApi, 'error'); return; }
+    ensureAudio();
+    ser.status = 'connecting';
+    renderDevice();
+    let port;
+    try { port = await api.requestPort(); } catch (e) {
+      ser.status = 'off';
+      setDevNote(e && e.name === 'NotFoundError' ? MSG.serCancel : MSG.serBusy, 'warn');
+      renderDevice();
+      return;
+    }
+    try { await port.open({ baudRate: 115200 }); } catch (e) {
+      ser.status = 'off';
+      setDevNote(MSG.serBusy, 'error');
+      renderDevice();
+      return;
+    }
+    Object.assign(ser, { port, status: 'waiting', buf: '', lines: 0, lastData: 0, connectAt: nowSec(), gyro: null, warned: '' });
+    sensor.mode = 'arduino';
+    sensor.dist = NaN; sensor.mag = 0; sensor.signed = 0;
+    virt.dist = NaN; virt.burst = null;
+    height.reset(); shake.reset();
+    setDevNote('연결했어요. 자이로 센서를 1초 동안 가만히 두면 영점을 맞춰요.');
+    renderAll();
+    readLoop(port);
+  }
+  async function readLoop(port) {
+    const decoder = new TextDecoder();
+    while (ser.port === port && port.readable) {
+      let reader;
+      try { reader = port.readable.getReader(); } catch (e) { break; }
+      ser.reader = reader;
+      let soft = false;
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value && ser.port === port) onSerialText(decoder.decode(value, { stream: true }));
+        }
+      } catch (e) {
+        soft = !!(e && SOFT_SERIAL_ERRORS.indexOf(e.name) >= 0);
+      } finally {
+        try { reader.releaseLock(); } catch (e) { /* 무시 */ }
+      }
+      if (!soft) break;
+    }
+    if (ser.port === port && ser.status !== 'off') { await closePort(); setDevNote(MSG.serLost, 'error'); renderAll(); }
+  }
+  async function closePort() {
+    const p = ser.port, r = ser.reader;
+    ser.status = 'off'; ser.port = null; ser.reader = null;
+    sensor.mode = 'virtual';
+    sensor.dist = NaN; sensor.mag = 0; sensor.signed = 0;
+    height.reset(); shake.reset();
+    if (r) { try { await r.cancel(); } catch (e) { /* 무시 */ } try { r.releaseLock(); } catch (e) { /* 무시 */ } }
+    if (p) { try { await p.close(); } catch (e) { /* 무시 */ } }
+  }
+  async function disconnectSerial() { await closePort(); setDevNote('아두이노 연결을 끊었어요. 가상 키트로 돌아왔어요.'); renderAll(); }
+  function onSerialText(text) {
+    ser.buf += text;
+    if (ser.buf.length > 20000) ser.buf = ser.buf.slice(-4000);
+    const parts = ser.buf.split('\n');
+    ser.buf = parts.pop();
+    const samples = [];
+    parts.forEach((raw) => {
+      const p = L.parseLine(raw);
+      if (!p) return;
+      if (p.info != null) { onSerialInfo(p.info); return; }
+      samples.push(p);
+    });
+    if (samples.length) onSamples(samples);
+  }
+  function onSerialInfo(s) {
+    if (/^GYRO\s+0/.test(s)) { ser.gyro = false; setDevNote(MSG.noGyro, 'warn'); renderDevice(); }
+    else if (/^GYRO\s+1/.test(s)) { ser.gyro = true; renderDevice(); }
+    else if (/찾지 못했어요|끊겼어요/.test(s)) setDevNote('아두이노 안내: ' + s, 'warn');
+    else if (/찾았어요|영점/.test(s)) setDevNote('아두이노 안내: ' + s);
+  }
+  function onSamples(samples) {
+    const t1 = nowSec(), n = samples.length;
+    samples.forEach((s, i) => {
+      const t = t1 - (n - 1 - i) * 0.025;
+      const d = s.dist >= 0 ? s.dist : NaN;
+      sensor.dist = d;
+      feedHeight(t, d, 2);
+      sensor.gx = s.gx; sensor.gy = s.gy; sensor.gz = s.gz;
+      sensor.mag = Math.hypot(s.gx, s.gy, s.gz);
+      sensor.signed = [s.gx, s.gy, s.gz].reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
+      notePeak(t, sensor.mag);
+      feedShake(t, s.gx, s.gy, s.gz);
+    });
+    ser.lines += n;
+    ser.lastData = t1;
+    if (ser.status === 'waiting') {
+      ser.status = 'live'; ser.warned = '';
+      if (ser.gyro === false) setDevNote('아두이노 값을 받고 있어요(초음파 센서만). ' + MSG.noGyro, 'warn');
+      else setDevNote('아두이노 값을 받고 있어요. 손을 센서 위에 올리고, 자이로 센서를 흔들어 봐요.');
+      renderDevice();
+    }
+  }
+  setInterval(() => {
+    if (ser.status === 'waiting' && !ser.lines && nowSec() - ser.connectAt > 3 && ser.warned !== 'nodata') { ser.warned = 'nodata'; setDevNote(MSG.serNoData, 'warn'); }
+    if (ser.status === 'live' && nowSec() - ser.lastData > 1.5) { ser.status = 'waiting'; ser.warned = 'stopped'; setDevNote(MSG.serStopped, 'warn'); renderDevice(); }
+  }, 500);
+
+  /* =====================================================================
+     12. 게임
+     ===================================================================== */
+  function ctxNow() { return { heightIndex: height.index, heightSince: height.since, camState: camStateNow() }; }
+  function startGame() {
+    ensureAudio();
+    cancelReplay();
+    const pool = actionsNow().filter((a) => !(a === 'shake' && sensor.mode === 'arduino' && ser.gyro === false));
+    game = L.createGame({ pool });
+    rec = []; recStart = nowSec();
+    handleGameEvents(game.start(nowSec()));
+    renderAll();
+    renderCheck();
+  }
+  function stopGame() {
+    if (game) game.stop();
+    $('#mission').hidden = true;
+    markTargetPad();
+    markTargetRung(-1);
+    renderAll();
+    renderCheck();
+  }
+  function missionHint(m) {               // 장치가 없을 때 쓸 수 있는 방법을 함께 보여 줘요
+    let alt = '';
+    if (m.id === 'shake') alt = sensor.mode === 'virtual' ? '끌거나 S 키' : '';
+    else if (m.id === 'height') alt = sensor.mode === 'virtual' ? '끌거나 ↑↓ 키' : '';
+    else alt = cam.status === 'on' ? '' : '키보드 ' + ACTIONS[m.id].keys.replace(' 키', '');
+    return '<span>6초 안에</span>' + (alt ? '<span class="mi-alt">' + alt + '</span>' : '');
+  }
+  function missionText(m) {
+    if (m.id === 'height') return '손 높이로 「' + NOTES[m.target].name + '」를 내요';
+    return ACTIONS[m.id].mission;
+  }
+  function handleGameEvents(evs) {
+    evs.forEach((e) => {
+      if (e.type === 'count') { burst(String(e.value), 'count'); A.fx('count'); }
+      else if (e.type === 'mission') {
+        const box = $('#mission');
+        box.hidden = false;
+        box.dataset.a = e.mission.id;
+        box.classList.remove('ok', 'miss');
+        $('#miIco').innerHTML = actionIcon(e.mission.id);
+        $('#miNum').textContent = e.index + ' / ' + e.total;
+        $('#miHint').innerHTML = missionHint(e.mission);
+        $('#miText').textContent = missionText(e.mission);
+        if (e.index === 1) { burst('시작!', 'good'); A.fx('go'); }
+        markTargetPad();
+        markTargetRung(e.mission.id === 'height' ? e.mission.target : -1);
+        renderDock();
+      } else if (e.type === 'success') {
+        $('#mission').classList.add('ok');
+        $('#miIco').innerHTML = CHECK_ICON;
+        burst('맞았어요!', 'good');
+        A.fx('ok');
+        markTargetRung(-1);
+        renderDock();
+      } else if (e.type === 'fail') {
+        $('#mission').classList.add('miss');
+        burst('시간이 지났어요', 'miss');
+        A.fx('miss');
+        markTargetRung(-1);
+        renderDock();
+      } else if (e.type === 'done') {
+        $('#mission').hidden = true;
+        lastResult = { score: e.score, total: e.total };
+        lastRec = rec.slice();
+        best = Math.max(best, e.score);
+        burst('끝! ' + e.score + ' / ' + e.total, 'good');
+        markTargetPad();
+        markTargetRung(-1);
+        renderAll();
+        renderCheck();
+        const chk = $('#hCheck');
+        if (chk && chk.scrollIntoView && window.innerWidth > 900) chk.closest('.sec').scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        toast(e.total + '문제 가운데 ' + e.score + '개를 맞혔어요. 「확인」에서 내 연주를 다시 들어 봐요.');
+      }
+    });
+  }
+  function markTargetRung(b) { document.querySelectorAll('.rung').forEach((r) => r.classList.toggle('target', Number(r.dataset.b) === b)); }
+  function cancelReplay() {
+    replayTimers.forEach((id) => clearTimeout(id));
+    replayTimers = [];
+    replaying = false;
+  }
+  function replay() {
+    if (!lastRec.length || replaying || (game && game.running())) return;
+    ensureAudio();
+    replaying = true;
+    renderCheck();
+    const evs = lastRec.slice();
+    const t0 = evs[0].t;
+    evs.forEach((e) => replayTimers.push(setTimeout(() => { A.play(e.inst, e.note, e.vel); flashPad(e.a); }, (e.t - t0) * 1000 + 150)));
+    replayTimers.push(setTimeout(() => { replayTimers = []; replaying = false; renderCheck(); }, (evs[evs.length - 1].t - t0) * 1000 + 1400));
+  }
+
+  /* =====================================================================
+     13. 매 프레임
+     ===================================================================== */
+  function feedHeight(t, d, confirm) {
+    const ch = height.push(t, d, confirm);
+    if (ch && ch.index >= 0) trigger('height', { note: ch.index, src: sensor.mode });
+  }
+  function feedShake(t, gx, gy, gz) {
+    const h = shake.push(t, gx, gy, gz);
+    if (h) trigger('shake', { vel: h.strength, src: sensor.mode });
+  }
+  function notePeak(t, mag) { if (mag >= sensor.peak || t - sensor.peakAt > 0.6) { sensor.peak = mag; sensor.peakAt = t; } }
+  const view = { handTop: '', handHidden: null, rung: -2, rot: '', meter: '', over: null, usVal: '', gyVal: '' };
+  function updateKit() {
+    const d = sensor.mode === 'virtual' ? virt.dist : sensor.dist;
+    const has = Number.isFinite(d) && L.heightBand(d) >= 0;
+    const hand = $('#usHand'), beam = $('#beam');
+    if (view.handHidden !== !has) { view.handHidden = !has; hand.hidden = !has; beam.hidden = !has; }
+    if (has) {
+      const top = (100 * (1 - clamp(d, 0, US.top) / US.top)).toFixed(2) + '%';
+      if (top !== view.handTop) { view.handTop = top; hand.style.top = top; beam.style.top = top; }
+    }
+    if (height.index !== view.rung) {
+      view.rung = height.index;
+      document.querySelectorAll('.rung').forEach((r) => r.classList.toggle('on', Number(r.dataset.b) === height.index));
+    }
+    const usText = has ? Math.round(d) + ' cm, ' + (height.index >= 0 ? NOTES[height.index].name : '-') : '손 없음';
+    if (usText !== view.usVal) {
+      view.usVal = usText;
+      $('#usVal').innerHTML = has ? '<b class="big dsp">' + (height.index >= 0 ? NOTES[height.index].name : '') + '</b><span class="unit">' + Math.round(d) + ' cm</span>' : '<span class="none">손 없음</span>';
+      $('#usBox .led').classList.toggle('lit', has);
+      ladder.setAttribute('aria-valuenow', has ? String(Math.round(d)) : '0');
+      ladder.setAttribute('aria-valuetext', usText);
+    }
+    const rot = 'rotate(' + (clamp(sensor.signed / 900, -1, 1) * 26).toFixed(1) + 'deg)';
+    if (rot !== view.rot) { view.rot = rot; $('#gyBoard').style.transform = rot; }
+    const thr = shake.threshold;
+    const fill = (100 * clamp01(sensor.mag / (thr * 2))).toFixed(1) + '%';
+    if (fill !== view.meter) { view.meter = fill; $('#gyMeter').style.width = fill; }
+    const over = sensor.mag >= thr;
+    if (over !== view.over) { view.over = over; $('#gyMeter').classList.toggle('over', over); $('#gyBox .led').classList.toggle('lit', over); }
+    const gyText = String(Math.round(sensor.mag));
+    if (gyText !== view.gyVal) { view.gyVal = gyText; $('#gyVal').innerHTML = '<b class="big dsp">' + gyText + '</b><span class="unit">°/s</span>'; }
+  }
+  function updateVals() {
+    const d = sensor.mode === 'virtual' ? virt.dist : sensor.dist;
+    const has = Number.isFinite(d) && L.heightBand(d) >= 0;
+    const vh = $('#vHeight');
+    vh.innerHTML = has ? (height.index >= 0 ? NOTES[height.index].name : '') + '<em>' + Math.round(d) + ' cm</em>' : '<span class="none">손 없음</span>';
+    vh.classList.toggle('dim', !has);
+    $('#vShake').innerHTML = Math.round(nowSec() - sensor.peakAt < 0.6 ? sensor.peak : sensor.mag) + '<em>°/s</em>';
+    let camText, camColor = '';
+    const cs = camStateNow();
+    if (state.keyHeld) { camText = ACTIONS[state.keyHeld].name + '<em>키보드</em>'; camColor = ACOLOR[state.keyHeld]; }
+    else if (cam.status !== 'on') camText = '<span class="none">' + (cam.status === 'loading' || cam.status === 'starting' ? '준비 중' : '꺼짐') + '</span>';
+    else if (cs) { camText = ACTIONS[cs].name; camColor = ACOLOR[cs]; }
+    else if (cam.det && state.kind === 'hand' && cam.det.kp) camText = '<span class="none">모르는 모양</span>';
+    else if (cam.det && state.kind === 'body' && cam.det.body && cam.det.body.state === 'none') camText = '<span class="none">팔 내림</span>';
+    else camText = '<span class="none">' + (state.kind === 'hand' ? '손이 안 보여요' : '몸이 안 보여요') + '</span>';
+    const vc = $('#vCam');
+    vc.innerHTML = camText;
+    vc.style.color = camColor;
+    vc.classList.toggle('dim', !camColor);
+    const vg = $('#vGame');
+    if (game && game.phase !== 'idle') vg.innerHTML = game.score + '<em>/ ' + game.total + ' 맞힘</em>';
+    else vg.innerHTML = lastResult ? lastResult.score + '<em>/ ' + lastResult.total + ' 맞힘</em>' : '<span class="none">시작 전</span>';
+    vg.classList.toggle('dim', !(game && game.phase !== 'idle') && !lastResult);
+  }
+  let lastValsAt = 0;
+  function frame() {
+    const t = nowSec();
+    if (sensor.mode === 'virtual') {
+      feedHeight(t, virt.dist, 1);
+      const moving = virt.dragging && t - virt.lastMove <= 0.06;    // 끄는 중에는 pointermove가 판정해요
+      if (!moving) virt.vx *= 0.55;
+      let gx = clamp(virt.vx * VIRT_K, -1600, 1600);
+      let feed = !moving;
+      if (virt.burst) {
+        // S 키 흔들기: 프레임이 늦게 와도 적어도 한 번은 판정에 넣어요
+        if (t < virt.burst.until || virt.burst.fed < 1) { gx = virt.burst.sign * shake.threshold * 2; virt.burst.fed += 1; feed = true; }
+        else virt.burst = null;
+      }
+      if (Math.abs(gx) < 0.5) gx = 0;
+      sensor.gx = gx; sensor.gy = 0; sensor.gz = 0; sensor.mag = Math.abs(gx); sensor.signed = gx;
+      notePeak(t, sensor.mag);
+      if (feed) feedShake(t, gx, 0, 0);
+    }
+    if (game && game.running()) {
+      handleGameEvents(game.tick(t, ctxNow()));
+      const left = game.timeLeft(t);
+      $('#miBar').style.transform = 'scaleX(' + (game.phase === 'mission' ? (left / game.limit).toFixed(3) : (game.phase === 'feedback' ? '0' : '1')) + ')';
+    }
+    drawCam();
+    updateKit();
+    if (t - lastValsAt > 0.1) { lastValsAt = t; updateVals(); }
+    requestAnimationFrame(frame);
+  }
+
+  /* =====================================================================
+     14. 단추 연결
+     ===================================================================== */
+  $('#btnSerial').addEventListener('click', () => { if (ser.status === 'off') connectSerial(); else disconnectSerial(); });
+  $('#btnCam').addEventListener('click', () => {
+    ensureAudio();
+    if (cam.status === 'on' || cam.status === 'starting' || cam.status === 'loading') stopCamera(); else startCamera();
+  });
+  document.querySelectorAll('#segKind button').forEach((b) => b.addEventListener('click', () => setKind(b.dataset.kind)));
+  $('#segKind').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    setKind(state.kind === 'hand' ? 'body' : 'hand');
+    const nb = document.querySelector('#segKind button[data-kind="' + state.kind + '"]');
+    if (nb) nb.focus();
+    e.preventDefault();
+  });
+  function setKind(kind) {
+    if (kind === state.kind || (game && game.running())) return;
+    state.kind = kind;
+    state.keyHeld = null;
+    handStab.reset(); bodyStab.reset();
+    cam.det = null;
+    renderMaps(); renderPads(); renderAll();
+    if (cam.status === 'on' || cam.status === 'loading') { const token = ++cam.token; runDetection(token); }
+  }
+  document.querySelectorAll('#segSens button').forEach((b) => b.addEventListener('click', () => {
+    state.sens = b.dataset.sens;
+    shake.threshold = SHAKE_LEVELS[state.sens];
+    document.querySelectorAll('#segSens button').forEach((x) => x.setAttribute('aria-checked', x === b ? 'true' : 'false'));
+    toast('흔들기 기준을 ' + shake.threshold + ' °/s로 바꿨어요.');
+  }));
+  $('#vol').addEventListener('input', (e) => { state.vol = Number(e.target.value); A.setVolume(state.vol); });
+  $('#hideVideo').addEventListener('change', (e) => { state.hideVideo = e.target.checked; });
+  $('#btnReset').addEventListener('click', () => { resetMap(); renderMaps(); renderPads(); toast('악기를 처음대로 되돌렸어요.'); });
+  $('#btnGame').addEventListener('click', () => {
+    if (game && game.running()) { stopGame(); toast('게임을 멈췄어요.'); } else startGame();
+  });
+  A.onBeat = () => {
+    const led = document.querySelector('#btnBeat .beatled');
+    if (!led) return;
+    led.classList.add('flash');
+    setTimeout(() => led.classList.remove('flash'), 120);
+  };
+  $('#btnBeat').addEventListener('click', () => {
+    const go = () => { if (!A.setBeat(!A.beatOn)) toast(state.libs.tone === 'failed' ? MSG.noTone : MSG.soundHint); renderDock(); };
+    if (A.ready) go();
+    else if (state.libs.tone === 'ready') A.start().then((ok) => { state.audio = ok ? 'ready' : 'off'; if (ok) A.setVolume(state.vol); go(); });
+    else go();
+  });
+  const help = $('#help');
+  $('#btnHelp').addEventListener('click', () => help.showModal());
+  $('#btnHelpClose').addEventListener('click', () => help.close());
+  help.addEventListener('click', (e) => { if (e.target === help) help.close(); });
+
+  function onLibEvent() {
+    const LB = window.__libs;
+    if (state.libs.tone === 'loading' && LB.tone !== 'loading') state.libs.tone = LB.tone === 'loaded' && window.Tone ? 'ready' : 'failed';
+    if (state.libs.ml5 === 'loading' && LB.ml5 !== 'loading') state.libs.ml5 = LB.ml5 === 'loaded' && window.ml5 && typeof window.ml5.handPose === 'function' ? 'ready' : 'failed';
+    if (state.libs.ml5 === 'failed' && cam.status === 'off') setDevNote(MSG.noMl5, 'warn');
+    renderAll();
+  }
+
+  /* =====================================================================
+     15. 자체 시험(#selftest)·시연 화면(#demo-…)·가짜 아두이노(#mock-serial)
+     ===================================================================== */
+  function fakeHand(ext, rotDeg, scale, ox, oy) {
+    const kp = [];
+    for (let i = 0; i < 21; i += 1) kp.push({ x: 0, y: 0 });
+    const angs = [-16, -5, 6, 17];
+    FINGER_IDX.forEach((f, i) => {
+      const a = (angs[i] - 90) * Math.PI / 180;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      const pos = ext[i] ? [1.0, 1.38, 1.62, 1.86] : [1.0, 1.28, 1.08, 0.98];
+      f.forEach((idx, j) => { kp[idx] = { x: ux * pos[j], y: uy * pos[j] }; });
+    });
+    [[1, 0.4], [2, 0.75], [3, 1.0], [4, 1.2]].forEach(([idx, r]) => { kp[idx] = { x: -0.55 * r, y: -0.45 * r }; });
+    const c = Math.cos(rotDeg * Math.PI / 180), sn = Math.sin(rotDeg * Math.PI / 180);
+    return kp.map((p) => ({ x: ox + scale * (p.x * c - p.y * sn), y: oy + scale * (p.x * sn + p.y * c) }));
+  }
+  function fakeBody(leftUp, rightUp, swapNames) {
+    const kps = [];
+    for (let i = 0; i < 17; i += 1) kps.push({ x: 320, y: 300, confidence: 0.9 });
+    kps[0] = { x: 320, y: 120, confidence: 0.9 };
+    const LS = { x: 260, y: 200, confidence: 0.9 }, RS = { x: 380, y: 200, confidence: 0.9 };   // 화면 왼쪽 = 내 왼쪽(거울)
+    const LW = leftUp ? { x: 240, y: 90, confidence: 0.8 } : { x: 250, y: 330, confidence: 0.8 };
+    const RW = rightUp ? { x: 400, y: 90, confidence: 0.8 } : { x: 390, y: 330, confidence: 0.8 };
+    if (!swapNames) { kps[5] = LS; kps[6] = RS; kps[9] = LW; kps[10] = RW; }
+    else { kps[6] = LS; kps[5] = RS; kps[10] = LW; kps[9] = RW; }
+    return kps;
+  }
+  function seeded(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function selfTest() {
+    const out = [];
+    const ok = (name, cond, info) => out.push({ name, pass: !!cond, info: info == null ? '' : String(info) });
+    // 손 높이
+    ok('거리 → 칸: 7 cm는 도, 27 cm는 솔, 44 cm는 높은 도', L.heightBand(7) === 0 && L.heightBand(27) === 4 && L.heightBand(44) === 7);
+    ok('거리 → 칸: 2 cm·50 cm·-1(못 잼)은 손 없음', L.heightBand(2) === -1 && L.heightBand(50) === -1 && L.heightBand(NaN) === -1);
+    const ht = L.createHeightTracker();
+    let r1 = ht.push(0, 22, 2), r2 = ht.push(0.025, 22, 2);
+    ok('아두이노 칸 바꾸기는 두 번 이어서 들어와야 해요', r1 === null && r2 && r2.index === 3);
+    const r3 = ht.push(0.05, 25.5, 2), r4 = ht.push(0.075, 25.5, 2);
+    ok('칸 경계 0.8 cm 안쪽 흔들림은 무시해요', r3 === null && r4 === null && ht.index === 3);
+    ht.push(0.1, 27, 2); const r5 = ht.push(0.125, 27, 2);
+    ok('경계를 넘으면 다음 칸(솔)으로 바뀌어요', r5 && r5.index === 4);
+    ht.push(0.15, NaN, 2); ht.push(0.175, NaN, 2); const r6 = ht.index;
+    const r7 = ht.push(0.2, NaN, 2);
+    ok('손이 사라진 것은 세 번 이어져야 인정해요', r6 === 4 && r7 && r7.index === -1);
+    // 흔들기
+    const sd = L.createShakeDetector(250);
+    let hits = 0;
+    for (let i = 0; i < 40; i += 1) { const t = i * 0.025; if (sd.push(t, 700 * Math.sin(2 * Math.PI * 5 * t), 0, 0)) hits += 1; }
+    ok('5 Hz로 1초 흔들면 한 번 갈 때마다 1번씩 약 10번 울려요', hits >= 9 && hits <= 10, hits + '번');
+    const sd2 = L.createShakeDetector(250);
+    let hits2 = 0;
+    for (let i = 0; i < 40; i += 1) { if (sd2.push(i * 0.025, 120 * Math.sin(i), 30, 0)) hits2 += 1; }
+    ok('기준보다 약하게 움직이면 울리지 않아요', hits2 === 0);
+    const sd3 = L.createShakeDetector(250);
+    let hits3 = 0;
+    for (let i = 0; i < 40; i += 1) { const a = i * 0.08; if (sd3.push(i * 0.025, 600 * Math.cos(a), 600 * Math.sin(a), 0)) hits3 += 1; }
+    ok('한 방향으로 계속 빙글 돌리면 1번만 울려요', hits3 === 1, hits3 + '번');
+    // 손 모양
+    const cases = [['rock', [0, 0, 0, 0]], ['scissors', [1, 1, 0, 0]], ['paper', [1, 1, 1, 1]], ['one', [1, 0, 0, 0]]];
+    let handOk = 0, handN = 0;
+    cases.forEach(([lbl, ext]) => [0, 25, -30, 180].forEach((rot) => [40, 120].forEach((sc) => {
+      handN += 1;
+      if (L.classifyHand(fakeHand(ext, rot, sc, 300, 260)).label === lbl) handOk += 1;
+    })));
+    ok('손 모양 4가지: 돌리거나 크기가 달라도 같은 답(가짜 손 점)', handOk === handN, handOk + ' / ' + handN);
+    ok('약지만 편 손은 모르는 모양', L.classifyHand(fakeHand([0, 0, 1, 0], 0, 80, 300, 260)).label === null);
+    // 몸 동작
+    const bodyCases = [[false, false, 'none'], [true, false, 'leftUp'], [false, true, 'rightUp'], [true, true, 'bothUp']];
+    let bodyOk = 0;
+    bodyCases.forEach(([lu, ru, want]) => { [false, true].forEach((sw) => { if (L.classifyBody(fakeBody(lu, ru, sw)).state === want) bodyOk += 1; }); });
+    ok('팔 들기 4가지: AI가 왼쪽·오른쪽 이름을 바꿔 붙여도 같은 답', bodyOk === 8, bodyOk + ' / 8');
+    ok('양팔에서 한 팔을 내리면 소리를 내지 않아요', !L.bodyShouldTrigger('bothUp', 'leftUp') && L.bodyShouldTrigger('leftUp', 'bothUp') && L.bodyShouldTrigger(null, 'rightUp'));
+    // 흔들림 막기
+    const sb = L.createStabilizer(2);
+    const s1 = sb.push('rock'), s2 = sb.push('rock'), s3 = sb.push(null), s4 = sb.push('rock');
+    ok('한 프레임만 바뀐 결과는 무시해요', s1 === null && s2 && s2.state === 'rock' && s3 === null && s4 === null && sb.state === 'rock');
+    // 아두이노 줄
+    const p1 = L.parseLine('23,-12.5,340.2,8.0\r'), p2 = L.parseLine('-1,0.0,0.0,0.0'), p3 = L.parseLine('dist_cm,gx,gy,gz');
+    const p4 = L.parseLine('#GYRO 1'), p5 = L.parseLine('12,,3,4'), p6 = L.parseLine('31,420');
+    ok('아두이노 줄 읽기(숫자 4칸·2칸, 제목 줄, 안내 줄, 빈칸)', p1 && p1.dist === 23 && p1.gy === 340.2 && p2 && p2.dist === -1 && p3 === null && p4 && p4.info === 'GYRO 1' && p5 === null && p6 && p6.gx === 420);
+    // 게임
+    const rng = seeded(7);
+    const pool = ['shake', 'height', 'rock', 'scissors', 'paper', 'one'];
+    const plan = L.planMissions(pool, 8, rng);
+    const noRepeat = plan.every((a, i) => i === 0 || a !== plan[i - 1]);
+    ok('게임 문제 8개: 행동마다 한 번 이상, 같은 행동이 이어지지 않아요', plan.length === 8 && pool.every((a) => plan.indexOf(a) >= 0) && noRepeat, plan.join(','));
+    const g = L.createGame({ pool, rng: seeded(3) });
+    g.start(0);
+    g.plan = ['shake', 'height', 'rock', 'scissors', 'paper', 'one', 'shake', 'rock'];
+    let ev = g.tick(1.2, {}); const c2 = ev.length && ev[0].value === 2;
+    ev = g.tick(3.01, { heightIndex: -1, camState: null });
+    const m1 = ev.length && ev[0].type === 'mission' && ev[0].mission.id === 'shake';
+    const wrong = g.hit(3.5, 'rock').length === 0;
+    const okHit = g.hit(3.6, 'shake');
+    ev = g.tick(4.6, { heightIndex: 2, heightSince: 4.6, camState: null });
+    const m2 = ev.length && ev[0].mission.id === 'height' && ev[0].mission.target !== 2;
+    const tgt = g.mission.target;
+    const early = g.tick(4.8, { heightIndex: tgt, heightSince: 4.7, camState: null }).length === 0;
+    const held = g.tick(5.05, { heightIndex: tgt, heightSince: 4.7, camState: null });
+    ok('게임: 3·2·1 뒤 시작, 다른 행동은 무시, 맞으면 점수', c2 && m1 && wrong && okHit.length === 1 && g.score >= 1);
+    ok('게임: 손 높이 문제는 지금 칸이 아닌 음을 내고, 0.3초 머물러야 맞아요', m2 && early && held.length === 1 && held[0].type === 'success');
+    ev = g.tick(6.0, { heightIndex: tgt, heightSince: 4.7, camState: 'rock' });
+    ok('게임: 이미 하고 있는 동작은 문제로 내지 않아요', ev.length && ev[0].mission.id !== 'rock');
+    const tout = g.tick(6.0 + 6.01, {});
+    ok('게임: 6초가 지나면 놓친 문제가 돼요', tout.length === 1 && tout[0].type === 'fail');
+    // 화면 배치
+    ok('무대에 입력 칸·단추가 없어요', !document.querySelector('.stage input, .stage select, .stage textarea, .stage button'));
+    const sr = $('.stage').getBoundingClientRect(), pr = $('.panel').getBoundingClientRect();
+    if (window.innerWidth > 900) ok('넓은 화면: 무대가 패널 왼쪽', sr.right <= pr.left + 1);
+    else ok('좁은 화면: 무대가 패널 위', sr.bottom <= pr.top + 1);
+    ok('가로 넘침 없음', document.documentElement.scrollWidth <= window.innerWidth + 1, document.documentElement.scrollWidth + ' / ' + window.innerWidth);
+    ok('악기 줄과 패드 수가 행동 수와 같아요', document.querySelectorAll('.map').length === actionsNow().length && document.querySelectorAll('.pad').length === actionsNow().length);
+    ok('주 단추(게임 시작)는 하나예요', document.querySelectorAll('.btn.pri').length === 1);
+    // 검토에서 찾은 결함이 다시 생기지 않는지
+    const keepGame = game;
+    const gb = L.createGame({ pool: ['leftUp', 'rightUp', 'bothUp'], rng: seeded(5) });
+    gb.start(0);
+    gb.plan = ['bothUp', 'leftUp', 'rightUp', 'bothUp', 'leftUp', 'rightUp', 'bothUp', 'leftUp'];
+    gb.tick(3.01, { camState: null });
+    gb.hit(3.5, 'bothUp');
+    const ev2 = gb.tick(4.5, { camState: 'bothUp' });
+    game = gb;
+    const lowerOne = ev2.length && ev2[0].mission.id === 'leftUp' && !L.bodyShouldTrigger('bothUp', 'leftUp') && isMissionTarget('leftUp') && !isMissionTarget('rightUp');
+    game = keepGame;
+    ok('몸 동작 게임: 양팔을 들고 있다가 한 팔을 내려 문제와 같아지면 맞힌 것으로 봐요', lowerOne);
+    handStab.reset(); handStab.push('rock'); handStab.push('rock');
+    const camOffState = cam.status !== 'on' ? camStateNow() : null;
+    handStab.reset();
+    ok('카메라가 꺼지거나 멈추면 마지막 인식 결과를 쓰지 않아요(숫자 키가 막히지 않음)', camOffState === null);
+    const keepRec = lastRec;
+    lastRec = [{ t: 0, a: 'shake', inst: 'maracas', note: 0, vel: 0.5 }, { t: 30, a: 'shake', inst: 'maracas', note: 0, vel: 0.5 }];
+    replay();
+    const wasReplaying = replaying;
+    cancelReplay();
+    ok('「내 연주 다시 듣기」는 멈출 수 있고, 멈추면 예약된 소리가 남지 않아요', wasReplaying && !replaying && replayTimers.length === 0);
+    lastRec = keepRec;
+    renderCheck();
+    const pass = out.filter((x) => x.pass).length, fail = out.length - pass;
+    window.__selftest = { done: true, pass, fail, results: out };
+    const box = document.createElement('div');
+    box.className = 'selftest';
+    box.innerHTML = '<b>자체 시험 ' + pass + ' / ' + out.length + ' 통과</b><ol>' + out.map((x) => '<li class="' + (x.pass ? '' : 'f') + '">' + (x.pass ? '통과 ' : '실패 ') + x.name + (x.info ? ' (' + x.info + ')' : '') + '</li>').join('') + '</ol>';
+    document.body.appendChild(box);
+  }
+  function demoGame(which) {
+    const pool = actionsNow();
+    game = L.createGame({ pool, rng: seeded(11) });
+    const t = nowSec();
+    if (which === 'game') {
+      const t0 = t - 7.35;
+      game.start(t0);
+      game.plan = ['shake', 'scissors', 'height', 'rock', 'paper', 'one', 'height', 'shake'];
+      handleGameEvents(game.tick(t0 + 3.01, { heightIndex: -1, camState: null }));
+      rec.push({ t: 0.6, a: 'shake', inst: state.map.shake, note: 0, vel: 0.9 });
+      handleGameEvents(game.hit(t0 + 4, 'shake'));
+      handleGameEvents(game.tick(t0 + 4.95, { heightIndex: -1, camState: null }));
+      virt.dist = 27;
+    } else {
+      const t0 = t - 80;
+      game.start(t0);
+      let tt = t0 + 3.01;
+      handleGameEvents(game.tick(tt, { heightIndex: -1, camState: null }));
+      for (let i = 0; i < 8; i += 1) {
+        const m = game.mission;
+        if (i !== 2 && i !== 5) {
+          rec.push({ t: tt - t0 + 0.8, a: m.id, inst: state.map[m.id], note: m.id === 'height' ? m.target : ACTIONS[m.id].note, vel: 0.85 });
+          if (m.id === 'height') handleGameEvents(game.tick(tt + 1.5, { heightIndex: m.target, heightSince: tt + 1, camState: null }));
+          else handleGameEvents(game.hit(tt + 1, m.id));
+        } else handleGameEvents(game.tick(tt + 6.01, {}));
+        tt = game.phaseAt + 1;
+        handleGameEvents(game.tick(tt, { heightIndex: -1, camState: null }));
+      }
+    }
+    renderAll();
+  }
+  function installMockSerial(noGyro) {
+    class MockPort {
+      constructor() { this.readable = null; this._timer = 0; }
+      async open() {
+        const enc = new TextEncoder();
+        const self = this;
+        let t = 0;
+        this.readable = new ReadableStream({
+          start(ctrl) {
+            ctrl.enqueue(enc.encode(noGyro ? '#MYSYNTH v1\r\n#GYRO 0\r\ndist_cm,gx,gy,gz\r\n' : '#MYSYNTH v1\r\n#자이로 센서를 찾았어요. 1초 동안 가만히 두면 영점을 맞춰요.\r\n#GYRO 1\r\ndist_cm,gx,gy,gz\r\n'));
+            self._timer = setInterval(() => {
+              t += 0.025;
+              const ph = t % 7;
+              const d = ph < 6 ? 8 + 34 * (ph < 3 ? ph / 3 : (6 - ph) / 3) : -1;
+              const sp = t % 2;
+              const g = noGyro ? 0 : (sp < 0.6 ? 700 * Math.sin(2 * Math.PI * 6 * sp) : 3 * Math.sin(t * 7));
+              try { ctrl.enqueue(enc.encode((d < 0 ? -1 : Math.round(d)) + ',' + g.toFixed(1) + ',' + (g * 0.2).toFixed(1) + ',1.0\r\n')); } catch (e) { clearInterval(self._timer); }
+            }, 25);
+          },
+          cancel() { clearInterval(self._timer); },
+        });
+      }
+      async close() { clearInterval(this._timer); }
+    }
+    try { Object.defineProperty(navigator, 'serial', { value: { requestPort: async () => new MockPort(), getPorts: async () => [] }, configurable: true }); } catch (e) { /* 시험용 */ }
+  }
+
+  /* =====================================================================
+     16. 시작
+     ===================================================================== */
+  const hash = location.hash;
+  if (hash.indexOf('mock-serial') >= 0) installMockSerial(hash.indexOf('nogyro') >= 0);
+  buildLadder();
+  renderMaps();
+  renderPads();
+  renderCheck();
+  window.__libs.hook = onLibEvent;
+  onLibEvent();
+  requestAnimationFrame(frame);
+  window.__synth = { L, A, state, sensor, virt, cam, ser, height, shake, debugPlays, trigger, get game() { return game; }, startGame, stopGame, setKind, connectSerial };
+  if (hash.indexOf('selftest') >= 0) setTimeout(selfTest, 300);
+  if (hash.indexOf('demo-game') >= 0) setTimeout(() => demoGame('game'), 100);
+  if (hash.indexOf('demo-result') >= 0) setTimeout(() => demoGame('result'), 100);
+  if (hash.indexOf('demo-body') >= 0) setTimeout(() => setKind('body'), 50);
+  if (hash.indexOf('demo-help') >= 0) setTimeout(() => help.showModal(), 100);
+})();
+</script>
+</body>
+</html>

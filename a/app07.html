@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Hand Rhythm Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: #0f172a;
+            color: white;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* The actual webcam video element is hidden, we draw it onto the canvas */
+        .input_video {
+            display: none;
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 10;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none; /* Let clicks pass through to canvas if needed */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2rem;
+        }
+
+        .hud-text {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        #start-menu, #game-over-menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.85);
+            padding: 3rem;
+            border-radius: 1.5rem;
+            border: 2px solid #38bdf8;
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.4);
+            text-align: center;
+            z-index: 30;
+            pointer-events: auto; /* Re-enable pointer events for buttons */
+            backdrop-filter: blur(10px);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+            border: none;
+            color: white;
+            padding: 1rem 3rem;
+            font-size: 1.5rem;
+            font-family: inherit;
+            font-weight: bold;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            box-shadow: 0 0 15px rgba(37, 99, 235, 0.6);
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(37, 99, 235, 1);
+        }
+
+        .btn:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        #loading-text {
+            color: #38bdf8;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <video class="input_video"></video>
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="flex justify-between w-full">
+            <div class="text-4xl font-black hud-text text-sky-400">SCORE: <span id="score-display">0</span></div>
+            <div class="text-4xl font-black hud-text text-rose-400">TIME: <span id="time-display">60</span></div>
+        </div>
+    </div>
+
+    <!-- Start Menu -->
+    <div id="start-menu">
+        <h1 class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-500 mb-6">HAND BEAT</h1>
+        <p class="text-gray-300 mb-8 max-w-md text-lg">Use your webcam! Move your index finger to tap the glowing notes before the outer ring closes.</p>
+        <p id="loading-text" class="mb-4 font-bold text-sky-400">Initializing Camera & AI...</p>
+        <button id="start-btn" class="btn" disabled>Start Game</button>
+    </div>
+
+    <!-- Game Over Menu -->
+    <div id="game-over-menu" style="display: none;">
+        <h1 class="text-5xl font-black text-rose-400 mb-4">GAME OVER</h1>
+        <p class="text-2xl text-white mb-6">Final Score: <span id="final-score" class="text-sky-400 font-bold">0</span></p>
+        <button id="restart-btn" class="btn">Play Again</button>
+    </div>
+</div>
+
+<script>
+    // --- Elements ---
+    const videoElement = document.querySelector('.input_video');
+    const canvasElement = document.getElementById('game-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    
+    const startMenu = document.getElementById('start-menu');
+    const gameOverMenu = document.getElementById('game-over-menu');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const loadingText = document.getElementById('loading-text');
+    
+    const scoreDisplay = document.getElementById('score-display');
+    const timeDisplay = document.getElementById('time-display');
+    const finalScoreDisplay = document.getElementById('final-score');
+
+    // --- Game State ---
+    let isCameraReady = false;
+    let isGameRunning = false;
+    let score = 0;
+    let timeLeft = 60;
+    let gameTimerInterval = null;
+    let lastTime = 0;
+    let noteSpawnTimer = 0;
+    const NOTE_SPAWN_INTERVAL = 800; // ms
+    
+    let notes = [];
+    let particles = [];
+    let activeHands = []; // Stores the latest landmarks
+
+    // --- Initialization & Resizing ---
+    function resizeCanvas() {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- Game Objects ---
+    class Note {
+        constructor() {
+            // Keep notes away from the very edges
+            const padding = 100;
+            this.x = padding + Math.random() * (canvasElement.width - padding * 2);
+            this.y = padding + Math.random() * (canvasElement.height - padding * 2);
+            this.radius = 40;
+            this.createdAt = performance.now();
+            this.lifespan = 1500; // ms to hit
+            this.color = `hsl(${Math.random() * 360}, 80%, 60%)`;
+            this.isHit = false;
+        }
+
+        draw(ctx, currentTime) {
+            const age = currentTime - this.createdAt;
+            const progress = age / this.lifespan;
+            
+            if (progress >= 1) return; // Expired
+
+            // Outer shrinking ring
+            const outerRadius = this.radius + (this.radius * 2 * (1 - progress));
+
+            // Draw outer ring
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, outerRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Draw inner note
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = this.color;
+            
+            // Inner core
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 0.5, 0, 2 * Math.PI);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    class Particle {
+        constructor(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.size = Math.random() * 8 + 4;
+            this.speedX = (Math.random() - 0.5) * 15;
+            this.speedY = (Math.random() - 0.5) * 15;
+            this.life = 1.0; // 1.0 to 0
+            this.decay = Math.random() * 0.05 + 0.02;
+        }
+
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.life -= this.decay;
+        }
+
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, 2 * Math.PI);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    // --- MediaPipe Hands Setup ---
+    const hands = new Hands({
+        locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }
+    });
+
+    hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    hands.onResults((results) => {
+        // Save landmarks to be processed in the game loop
+        activeHands = results.multiHandLandmarks || [];
+        
+        // We draw the video feed directly in the camera callback so it stays synced
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Mirror the canvas for drawing the video so it acts like a mirror
+        canvasCtx.translate(canvasElement.width, 0);
+        canvasCtx.scale(-1, 1);
+        
+        // Draw the camera feed (it stretches to cover, matching CSS object-fit: cover roughly if we handle aspect ratios, but we'll draw it to fill canvas for simplicity)
+        if (results.image) {
+            // Better aspect ratio handling to avoid stretching
+            const imgAspect = results.image.width / results.image.height;
+            const canvasAspect = canvasElement.width / canvasElement.height;
+            let drawWidth, drawHeight, offsetX = 0, offsetY = 0;
+
+            if (canvasAspect > imgAspect) {
+                drawWidth = canvasElement.width;
+                drawHeight = canvasElement.width / imgAspect;
+                offsetY = (canvasElement.height - drawHeight) / 2;
+            } else {
+                drawHeight = canvasElement.height;
+                drawWidth = canvasElement.height * imgAspect;
+                offsetX = (canvasElement.width - drawWidth) / 2;
+            }
+            
+            canvasCtx.drawImage(results.image, offsetX, offsetY, drawWidth, drawHeight);
+        }
+        
+        // Darken the video feed slightly for better note visibility
+        canvasCtx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.restore();
+
+        // If this is the first successful result, enable the start button
+        if (!isCameraReady) {
+            isCameraReady = true;
+            loadingText.style.display = 'none';
+            startBtn.disabled = false;
+            startBtn.textContent = 'START GAME';
+        }
+    });
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({image: videoElement});
+        },
+        width: 1280,
+        height: 720
+    });
+    camera.start().catch(err => {
+        console.error("Camera error:", err);
+        loadingText.textContent = "Camera access denied or unavailable. Please allow permissions.";
+        loadingText.style.color = "#f43f5e"; // rose-500
+    });
+
+
+    // --- Game Logic ---
+    function spawnNote() {
+        notes.push(new Note());
+    }
+
+    function createExplosion(x, y, color) {
+        for (let i = 0; i < 20; i++) {
+            particles.push(new Particle(x, y, color));
+        }
+    }
+
+    function checkCollisions(currentTime) {
+        // Iterate over hands and specifically check landmark 8 (Index finger tip)
+        activeHands.forEach(hand => {
+            const indexFinger = hand[8]; 
+            
+            // Map normalized coordinates [0, 1] to canvas pixels.
+            // *IMPORTANT*: Because we mirrored the video horizontally for the user, 
+            // the x coordinate provided by mediapipe is also visually mirrored relative to the screen.
+            // A point on the physical left (user's right hand) will have an X close to 1.0.
+            // To map to the mirrored canvas display, we do: (1 - x) * width
+            const fingerX = (1 - indexFinger.x) * canvasElement.width;
+            const fingerY = indexFinger.y * canvasElement.height;
+
+            // Draw a glowing dot on the index finger for visual feedback
+            canvasCtx.beginPath();
+            canvasCtx.arc(fingerX, fingerY, 15, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = '#38bdf8';
+            canvasCtx.fill();
+            canvasCtx.shadowBlur = 10;
+            canvasCtx.shadowColor = '#38bdf8';
+            canvasCtx.beginPath();
+            canvasCtx.arc(fingerX, fingerY, 8, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = 'white';
+            canvasCtx.fill();
+            canvasCtx.shadowBlur = 0;
+
+            // Check collision with notes
+            for (let i = notes.length - 1; i >= 0; i--) {
+                const note = notes[i];
+                const dx = fingerX - note.x;
+                const dy = fingerY - note.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < note.radius) {
+                    // Hit!
+                    score += 10;
+                    scoreDisplay.textContent = score;
+                    createExplosion(note.x, note.y, note.color);
+                    notes.splice(i, 1);
+                    
+                    // Simple pop scale effect on score
+                    scoreDisplay.style.transform = 'scale(1.5)';
+                    setTimeout(() => scoreDisplay.style.transform = 'scale(1)', 150);
+                }
+            }
+        });
+    }
+
+    function gameLoop(timestamp) {
+        if (!isGameRunning) return;
+
+        const deltaTime = timestamp - lastTime;
+        lastTime = timestamp;
+
+        // The background and video are drawn inside the hands.onResults callback to sync frames.
+        // However, if the camera frame rate is lower than the screen refresh rate, 
+        // we might want to still process particles and fading notes here.
+        // For this simple implementation, we draw game objects here on top of whatever was drawn last by onResults.
+
+        // Spawn notes
+        noteSpawnTimer += deltaTime;
+        if (noteSpawnTimer >= NOTE_SPAWN_INTERVAL) {
+            spawnNote();
+            noteSpawnTimer = 0;
+        }
+
+        // Draw and update notes
+        for (let i = notes.length - 1; i >= 0; i--) {
+            const note = notes[i];
+            const age = timestamp - note.createdAt;
+            
+            if (age > note.lifespan) {
+                notes.splice(i, 1); // Missed note
+            } else {
+                note.draw(canvasCtx, timestamp);
+            }
+        }
+
+        // Detect collisions and draw finger pointers
+        checkCollisions(timestamp);
+
+        // Update and draw particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.update();
+            p.draw(canvasCtx);
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Game Control Methods ---
+    function startGame() {
+        startMenu.style.display = 'none';
+        gameOverMenu.style.display = 'none';
+        score = 0;
+        timeLeft = 60;
+        notes = [];
+        particles = [];
+        scoreDisplay.textContent = score;
+        timeDisplay.textContent = timeLeft;
+        isGameRunning = true;
+        lastTime = performance.now();
+        
+        // Start Timer
+        gameTimerInterval = setInterval(() => {
+            timeLeft--;
+            timeDisplay.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }, 1000);
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() {
+        isGameRunning = false;
+        clearInterval(gameTimerInterval);
+        finalScoreDisplay.textContent = score;
+        gameOverMenu.style.display = 'block';
+    }
+
+    // --- Event Listeners ---
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', startGame);
+
+</script>
+</body>
+</html>

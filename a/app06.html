@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI K-POP Nose Rhythm Master - 12 Songs</title>
+  
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- MediaPipe Face Mesh & Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800;900&display=swap');
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background-color: #070913;
+      color: #ffffff;
+      overflow: hidden;
+      user-select: none;
+    }
+    .glass-panel {
+      background: rgba(18, 22, 38, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .neon-shadow {
+      box-shadow: 0 0 25px rgba(236, 72, 153, 0.4);
+    }
+    /* 스크롤바 커스텀 스타일 */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(10, 14, 26, 0.5);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(236, 72, 153, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(236, 72, 153, 0.8);
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between p-4 relative">
+
+  <!-- Header / HUD -->
+  <header class="flex justify-between items-center z-20 glass-panel p-3 rounded-2xl neon-shadow">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 to-violet-600 flex items-center justify-center text-xl shadow-lg">
+        <i class="fa-solid fa-music text-white"></i>
+      </div>
+      <div>
+        <h1 class="font-black text-lg tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-pink-400 via-purple-300 to-cyan-400">
+          AI K-POP 리듬 마스터
+        </h1>
+        <p id="current-song-title" class="text-xs text-slate-400">선택된 곡: 없음</p>
+      </div>
+    </div>
+
+    <!-- Song Progress Bar -->
+    <div class="flex-1 max-w-md mx-8">
+      <div class="flex justify-between text-xs text-slate-400 mb-1">
+        <span>곡 진행률</span>
+        <span id="progress-percent">0%</span>
+      </div>
+      <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+        <div id="progress-bar" class="h-full bg-gradient-to-r from-pink-500 to-cyan-400 rounded-full transition-all duration-150" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Score & Combo -->
+    <div class="flex items-center gap-6">
+      <div class="text-right">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Score</p>
+        <p id="score-text" class="text-xl font-black text-cyan-400">0</p>
+      </div>
+      <div class="text-right">
+        <p class="text-[10px] text-slate-400 font-bold uppercase">Combo</p>
+        <p id="combo-text" class="text-xl font-black text-pink-500">0</p>
+      </div>
+      <div id="nose-status" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-950/60 border border-red-500/40 text-red-400 text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+        <span>코 대기중</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Game Stage / Canvas Area -->
+  <main class="relative flex-1 my-3 rounded-2xl overflow-hidden glass-panel flex items-center justify-center border border-slate-800">
+    <video id="webcam" class="hidden" playsinline></video>
+    <canvas id="game-canvas" class="w-full h-full object-cover"></canvas>
+
+    <!-- Song Selection Menu Overlay (12 Songs Grid with Scroll) -->
+    <div id="song-select-overlay" class="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center z-30 gap-4 p-6">
+      <div class="text-center max-w-xl shrink-0">
+        <span class="px-3 py-1 rounded-full bg-pink-500/20 border border-pink-500/40 text-pink-400 text-xs font-bold tracking-widest uppercase">K-POP 12 Tracks Stage</span>
+        <h2 class="text-2xl font-black mt-2 mb-1 text-white">원하시는 K-POP 곡을 선택하세요</h2>
+        <p class="text-slate-400 text-xs">웹캠 화면 속 <span class="text-pink-400 font-bold">코 끝</span>으로 4개 레일로 떨어지는 노트를 터치하세요!</p>
+      </div>
+
+      <div class="w-full max-w-5xl flex-1 overflow-y-auto px-2 py-2">
+        <div id="song-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <!-- 12 Songs injected via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Result Modal Overlay -->
+    <div id="result-overlay" class="absolute inset-0 bg-slate-950/90 backdrop-blur-md hidden flex flex-col items-center justify-center z-40 gap-4 p-6">
+      <div class="glass-panel p-8 rounded-3xl max-w-md w-full text-center neon-shadow border border-pink-500/30">
+        <span class="text-xs font-bold text-pink-400 uppercase tracking-widest">Stage Clear!</span>
+        <h2 class="text-3xl font-black text-white mt-1 mb-4">연주 완료 리포트</h2>
+        
+        <div id="result-grade" class="text-7xl font-black my-4 bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-pink-500">S</div>
+        
+        <div class="space-y-2 text-sm text-slate-300 bg-slate-900/60 p-4 rounded-2xl mb-6 text-left border border-slate-800">
+          <div class="flex justify-between"><span>총 점수:</span> <span id="res-score" class="font-bold text-cyan-400">0</span></div>
+          <div class="flex justify-between"><span>최고 콤보:</span> <span id="res-combo" class="font-bold text-pink-400">0</span></div>
+          <div class="flex justify-between"><span>PERFECT:</span> <span id="res-perf" class="font-bold text-amber-400">0</span></div>
+          <div class="flex justify-between"><span>GREAT / GOOD:</span> <span id="res-great" class="font-bold text-emerald-400">0</span></div>
+          <div class="flex justify-between"><span>MISS:</span> <span id="res-miss" class="font-bold text-red-400">0</span></div>
+        </div>
+
+        <button id="retry-btn" class="w-full py-3.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 font-extrabold text-white rounded-xl shadow-lg transition-all hover:scale-[1.02]">
+          <i class="fa-solid fa-rotate-right mr-2"></i> 곡 선택 화면으로 돌아가기
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer Controls -->
+  <footer class="z-20 glass-panel p-3 rounded-2xl flex items-center justify-between text-xs px-6">
+    <div class="flex items-center gap-4 text-slate-400">
+      <span><i class="fa-solid fa-bullseye text-pink-400 mr-1"></i> 코 판정 범위 (Hitbox):</span>
+      <input id="hitbox-size" type="range" min="20" max="50" value="32" class="accent-pink-500 cursor-pointer w-28">
+    </div>
+    <div class="text-slate-400 flex items-center gap-2">
+      <i class="fa-solid fa-circle-info text-cyan-400"></i>
+      <span>팁: 고개를 움직여 각 레일의 보석을 정확히 터치해 보세요!</span>
+    </div>
+  </footer>
+
+  <script>
+    // --- 1. 12 K-POP Songs Data & Chart Charts ---
+    const KPOP_SONGS = [
+      { id: 'newjeans_supershy', title: 'Super Shy', artist: 'NewJeans', bpm: 126, color: '#3b82f6', durationMs: 30000 },
+      { id: 'ive_iam', title: 'I AM', artist: 'IVE', bpm: 134, color: '#ec4899', durationMs: 30000 },
+      { id: 'bts_dynamite', title: 'Dynamite', artist: 'BTS', bpm: 114, color: '#eab308', durationMs: 30000 },
+      { id: 'blackpink_ddu', title: '뚜두뚜두 (DDU-DU)', artist: 'BLACKPINK', bpm: 130, color: '#ef4444', durationMs: 30000 },
+      { id: 'aespa_nextlevel', title: 'Next Level', artist: 'aespa', bpm: 130, color: '#10b981', durationMs: 30000 },
+      { id: 'twice_cheerup', title: 'CHEER UP', artist: 'TWICE', bpm: 136, color: '#f97316', durationMs: 30000 },
+      { id: 'lesserafim_unforgiven', title: 'UNFORGIVEN', artist: 'LE SSERAFIM', bpm: 128, color: '#8b5cf6', durationMs: 30000 },
+      { id: 'gidle_queencard', title: '퀸카 (Queencard)', artist: '(G)I-DLE', bpm: 130, color: '#06b6d4', durationMs: 30000 },
+      { id: 'redvelvet_redflavor', title: '빨간 맛', artist: 'Red Velvet', bpm: 125, color: '#f43f5e', durationMs: 30000 },
+      { id: 'seventeen_super', title: '손오공 (Super)', artist: 'SEVENTEEN', bpm: 135, color: '#38bdf8', durationMs: 30000 },
+      { id: 'exo_growl', title: '으르렁 (Growl)', artist: 'EXO', bpm: 110, color: '#a855f7', durationMs: 30000 },
+      { id: 'newjeans_hypeboy', title: 'Hype Boy', artist: 'NewJeans', bpm: 115, color: '#6366f1', durationMs: 30000 }
+    ];
+
+    function generateKPopChart(bpm, totalDuration) {
+      const chart = [];
+      const beatInterval = 60000 / bpm;
+      const notesTotal = Math.floor(totalDuration / (beatInterval / 2));
+      const freqs = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+
+      for (let i = 8; i < notesTotal - 4; i++) {
+        if (Math.random() > 0.28) {
+          const lane = Math.floor(Math.random() * 4);
+          const time = i * (beatInterval / 2);
+          chart.push({ time, lane, freq: freqs[lane], hit: false });
+        }
+      }
+      return chart;
+    }
+
+    // Pre-generate charts for all songs
+    KPOP_SONGS.forEach(song => {
+      song.chart = generateKPopChart(song.bpm, song.durationMs);
+    });
+
+    // --- 2. Audio Synthesizer Engine ---
+    class KPopSynth {
+      constructor() { this.ctx = null; }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+      }
+      play(freq) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.4);
+      }
+    }
+
+    // --- 3. DOM & State Variables ---
+    const videoEl = document.getElementById('webcam');
+    const canvasEl = document.getElementById('game-canvas');
+    const ctx = canvasEl.getContext('2d');
+
+    const songSelectOverlay = document.getElementById('song-select-overlay');
+    const songListContainer = document.getElementById('song-list');
+    const resultOverlay = document.getElementById('result-overlay');
+    
+    const scoreTextEl = document.getElementById('score-text');
+    const comboTextEl = document.getElementById('combo-text');
+    const currentSongTitleEl = document.getElementById('current-song-title');
+    const progressBarEl = document.getElementById('progress-bar');
+    const progressPercentEl = document.getElementById('progress-percent');
+    const noseStatusEl = document.getElementById('nose-status');
+    const hitboxSizeInput = document.getElementById('hitbox-size');
+
+    const synth = new KPopSynth();
+
+    let gameState = 'SELECT';
+    let selectedSong = null;
+    let songStartTime = 0;
+    let score = 0;
+    let combo = 0;
+    let maxCombo = 0;
+    let stats = { perfect: 0, great: 0, good: 0, miss: 0 };
+    let activeNotes = [];
+    let particles = [];
+    let floatingTexts = [];
+
+    let rawNose = { x: 0, y: 0, detected: false };
+    let smoothNose = { x: 0, y: 0 };
+    const alpha = 0.4;
+
+    function resizeCanvas() {
+      canvasEl.width = canvasEl.parentElement.clientWidth;
+      canvasEl.height = canvasEl.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Render 12 Song Cards
+    function initSongSelector() {
+      songListContainer.innerHTML = '';
+      KPOP_SONGS.forEach(song => {
+        const card = document.createElement('div');
+        card.className = "glass-panel p-4 rounded-2xl cursor-pointer hover:border-pink-500 transition-all hover:scale-[1.03] flex flex-col justify-between group";
+        card.innerHTML = `
+          <div>
+            <div class="w-8 h-8 rounded-lg bg-pink-500/20 border border-pink-500/40 flex items-center justify-center text-pink-400 mb-2 group-hover:bg-pink-500 group-hover:text-white transition-colors">
+              <i class="fa-solid fa-compact-disc text-sm"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white truncate">${song.title}</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">${song.artist}</p>
+          </div>
+          <div class="flex items-center justify-between mt-4 pt-2 border-t border-slate-800 text-[11px]">
+            <span class="text-pink-400 font-semibold">BPM ${song.bpm}</span>
+            <span class="text-slate-400"><i class="fa-solid fa-play ml-0.5"></i> PLAY</span>
+          </div>
+        `;
+        card.addEventListener('click', () => startSong(song));
+        songListContainer.appendChild(card);
+      });
+    }
+    initSongSelector();
+
+    function startSong(song) {
+      synth.init();
+      selectedSong = song;
+      score = 0;
+      combo = 0;
+      maxCombo = 0;
+      stats = { perfect: 0, great: 0, good: 0, miss: 0 };
+      
+      scoreTextEl.innerText = '0';
+      comboTextEl.innerText = '0';
+      currentSongTitleEl.innerText = `현재 곡: ${song.title} - ${song.artist}`;
+
+      activeNotes = JSON.parse(JSON.stringify(song.chart));
+      particles = [];
+      floatingTexts = [];
+
+      songSelectOverlay.classList.add('hidden');
+      resultOverlay.classList.add('hidden');
+      
+      gameState = 'PLAYING';
+      songStartTime = Date.now();
+    }
+
+    // --- 4. MediaPipe FaceMesh Setup ---
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+
+    faceMesh.onResults((results) => {
+      ctx.save();
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+      if (results.image) {
+        ctx.translate(canvasEl.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+        ctx.restore();
+      }
+
+      ctx.fillStyle = 'rgba(7, 9, 19, 0.6)';
+      ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const nose = results.multiFaceLandmarks[0][1];
+        if (nose) {
+          const targetX = (1 - nose.x) * canvasEl.width;
+          const targetY = nose.y * canvasEl.height;
+
+          if (!rawNose.detected) {
+            smoothNose.x = targetX; smoothNose.y = targetY;
+            rawNose.detected = true;
+          } else {
+            smoothNose.x += (targetX - smoothNose.x) * alpha;
+            smoothNose.y += (targetY - smoothNose.y) * alpha;
+          }
+          noseStatusEl.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-semibold";
+          noseStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>코 인식 완료</span>`;
+        }
+      } else {
+        rawNose.detected = false;
+        noseStatusEl.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-950/60 border border-red-500/40 text-red-400 text-xs font-semibold";
+        noseStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span><span>코 대기중</span>`;
+      }
+
+      if (gameState === 'PLAYING') {
+        updateAndRenderGameLoop();
+      }
+    });
+
+    // --- 5. Main Game Loop ---
+    function updateAndRenderGameLoop() {
+      const now = Date.now();
+      const elapsed = now - songStartTime;
+      const progress = Math.min(100, (elapsed / selectedSong.durationMs) * 100);
+      
+      progressBarEl.style.width = `${progress}%`;
+      progressPercentEl.innerText = `${Math.floor(progress)}%`;
+
+      if (elapsed >= selectedSong.durationMs || activeNotes.length === 0) {
+        endSong();
+        return;
+      }
+
+      const laneWidth = canvasEl.width / 4;
+      const hitLineY = canvasEl.height - 120;
+      const noteSpeed = 0.55;
+
+      for (let i = 0; i < 4; i++) {
+        const lx = i * laneWidth;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(lx, 0, laneWidth, canvasEl.height);
+
+        ctx.fillStyle = 'rgba(236, 72, 153, 0.04)';
+        ctx.fillRect(lx, hitLineY - 40, laneWidth, 100);
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.strokeStyle = '#ec4899';
+      ctx.lineWidth = 4;
+      ctx.shadowColor = '#ec4899';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.moveTo(0, hitLineY);
+      ctx.lineTo(canvasEl.width, hitLineY);
+      ctx.stroke();
+      ctx.restore();
+
+      const hitboxRadius = parseInt(hitboxSizeInput.value, 10);
+
+      for (let i = activeNotes.length - 1; i >= 0; i--) {
+        const note = activeNotes[i];
+        const timeLeft = note.time - elapsed;
+        const noteY = hitLineY - (timeLeft * noteSpeed);
+
+        if (noteY > hitLineY + 60 && !note.hit) {
+          note.hit = true;
+          stats.miss++;
+          combo = 0;
+          comboTextEl.innerText = '0';
+          addFloatingText(note.lane * laneWidth + laneWidth/2, hitLineY, 'MISS', '#f43f5e');
+          activeNotes.splice(i, 1);
+          continue;
+        }
+
+        if (noteY > -50 && noteY < canvasEl.height + 50) {
+          const nx = note.lane * laneWidth + laneWidth / 2;
+          const ny = noteY;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(nx, ny, 24, 0, Math.PI * 2);
+          ctx.fillStyle = selectedSong.color;
+          ctx.shadowColor = selectedSong.color;
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+          ctx.restore();
+
+          if (rawNose.detected && !note.hit) {
+            const noteLane = Math.floor(smoothNose.x / laneWidth);
+            const dx = nx - smoothNose.x;
+            const dy = ny - smoothNose.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (note.lane === noteLane && dist < (24 + hitboxRadius) && Math.abs(ny - hitLineY) < 50) {
+              note.hit = true;
+              synth.play(note.freq);
+
+              const diff = Math.abs(ny - hitLineY);
+              let judge = 'GOOD';
+              let pts = 100;
+              if (diff < 15) { judge = 'PERFECT'; pts = 300; stats.perfect++; }
+              else if (diff < 30) { judge = 'GREAT'; pts = 200; stats.great++; }
+              else { stats.good++; }
+
+              combo++;
+              if (combo > maxCombo) maxCombo = combo;
+              score += pts + (combo * 10);
+
+              scoreTextEl.innerText = score.toLocaleString();
+              comboTextEl.innerText = combo;
+
+              createExplosion(nx, ny, selectedSong.color);
+              addFloatingText(nx, hitLineY - 20, judge, judge === 'PERFECT' ? '#f59e0b' : '#10b981');
+
+              activeNotes.splice(i, 1);
+            }
+          }
+        }
+      }
+
+      renderParticlesAndTexts();
+
+      if (rawNose.detected) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(smoothNose.x, smoothNose.y, hitboxRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ec4899';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#ec4899';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(smoothNose.x, smoothNose.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function createExplosion(x, y, color) {
+      for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 5;
+        particles.push({ x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, alpha: 1, color });
+      }
+    }
+
+    function addFloatingText(x, y, text, color) {
+      floatingTexts.push({ x, y, text, color, alpha: 1, vy: -1.5 });
+    }
+
+    function renderParticlesAndTexts() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.alpha -= 0.04;
+        if (p.alpha <= 0) { particles.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 4, 4);
+        ctx.restore();
+      }
+
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y += ft.vy; ft.alpha -= 0.03;
+        if (ft.alpha <= 0) { floatingTexts.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = ft.alpha;
+        ctx.fillStyle = ft.color;
+        ctx.font = '900 18px Pretendard';
+        ctx.textAlign = 'center';
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+    }
+
+    function endSong() {
+      gameState = 'RESULT';
+      
+      const totalNotes = stats.perfect + stats.great + stats.good + stats.miss || 1;
+      const accuracy = (stats.perfect * 1.0 + stats.great * 0.8 + stats.good * 0.5) / totalNotes;
+      
+      let grade = 'C';
+      if (accuracy > 0.9) grade = 'S';
+      else if (accuracy > 0.8) grade = 'A';
+      else if (accuracy > 0.6) grade = 'B';
+
+      document.getElementById('result-grade').innerText = grade;
+      document.getElementById('res-score').innerText = score.toLocaleString();
+      document.getElementById('res-combo').innerText = maxCombo;
+      document.getElementById('res-perf').innerText = stats.perfect;
+      document.getElementById('res-great').innerText = stats.great + stats.good;
+      document.getElementById('res-miss').innerText = stats.miss;
+
+      resultOverlay.classList.remove('hidden');
+    }
+
+    const camera = new Camera(videoEl, {
+      onFrame: async () => { await faceMesh.send({ image: videoEl }); },
+      width: 1280, height: 720
+    });
+    camera.start();
+
+    document.getElementById('retry-btn').addEventListener('click', () => {
+      resultOverlay.classList.add('hidden');
+      songSelectOverlay.classList.remove('hidden');
+      gameState = 'SELECT';
+    });
+  </script>
+</body>
+</html>

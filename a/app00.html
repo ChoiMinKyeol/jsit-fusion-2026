@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>머리 피하기</title>
+<style>
+  :root {
+    --bg: #0d1b21;
+    --ink: #eef3f1;
+    --muted: #8fa5a8;
+    --danger: #ff3b30;
+    --accent: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 12px; }
+  #hud { width: min(100%, 960px); display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+  #hud .score { font-size: 2rem; font-weight: 700; }
+  #hud .lives { color: var(--danger); letter-spacing: 4px; font-size: 1.5rem; }
+  #hud .best { color: var(--muted); }
+  #stage { position: relative; width: min(100%, 960px); aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; }
+  canvas { width: 100%; height: 100%; display: block; }
+  video { display: none; }
+  #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; text-align: center; background: rgba(13, 27, 33, 0.78); padding: 24px; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { margin: 0; font-size: clamp(1.6rem, 5vw, 2.8rem); }
+  #overlay p { margin: 0; color: var(--muted); max-width: 34em; line-height: 1.6; }
+  button { font: inherit; font-weight: 700; font-size: 1.1rem; padding: 12px 32px; border: 0; border-radius: 8px;
+    background: var(--accent); color: #1b1500; cursor: pointer; }
+  button:hover { filter: brightness(1.08); }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  button:disabled { opacity: .5; cursor: wait; }
+  #status { min-height: 1.4em; color: var(--accent); }
+</style>
+</head>
+<body>
+  <div id="hud">
+    <span class="score" id="score">0</span>
+    <span class="lives" id="lives"></span>
+    <span class="best" id="best">최고 0</span>
+  </div>
+
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <video id="cam" playsinline muted></video>
+    <div id="overlay">
+      <h1 id="title">머리 피하기</h1>
+      <p id="desc">웹캠에 얼굴이 보이게 앉아 주세요. 화면이 9칸으로 나뉘고, 붉게 깜빡이는 칸이 곧 위험 구역이 됩니다. 얼굴 중심이 그 칸에 있으면 목숨이 줄어요.</p>
+      <button id="startBtn">시작하기</button>
+      <div id="status"></div>
+    </div>
+  </div>
+
+<script type="module">
+import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
+
+const WASM  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MODEL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
+
+// ====== 조절용 설정값 ======
+const CFG = {
+  lives: 3,
+  startCells: 2,        // 처음 위험 칸 개수
+  maxCells: 6,          // 최대 위험 칸 개수 (9 미만이어야 피할 곳이 있음)
+  roundsPerLevel: 3,    // 몇 라운드마다 위험 칸이 1개 늘어나는지
+  warnStart: 1.6,       // 경고(깜빡임) 시간 시작값(초)
+  warnMin: 0.7,         // 경고 시간 최솟값
+  warnStep: 0.06,       // 라운드마다 줄어드는 경고 시간
+  dangerTime: 0.6,      // 위험 구역 유지 시간
+  restTime: 0.6,        // 라운드 사이 휴식
+  faceLostLimit: 0.4,   // 얼굴을 놓친 뒤 일시정지까지 걸리는 시간
+};
+
+const $ = (id) => document.getElementById(id);
+const video = $("cam"), canvas = $("view"), ctx = canvas.getContext("2d");
+const overlay = $("overlay"), statusEl = $("status"), startBtn = $("startBtn");
+
+let detector = null, ready = false;
+let W = 960, H = 540;
+let state = "idle"; // idle | playing | over
+
+const face = { x: 0, y: 0, seen: false, lostFor: 0 };
+const game = { score: 0, lives: CFG.lives, round: 0, phase: "rest", t: 0, cells: [], hit: false, flash: 0 };
+let best = Number(localStorage.getItem("headDodgeBest") || 0);
+$("best").textContent = "최고 " + best;
+
+// ====== 초기화 (모델 + 웹캠) ======
+async function init() {
+  statusEl.textContent = "얼굴 인식 모델을 불러오는 중…";
+  const fileset = await FilesetResolver.forVisionTasks(WASM);
+  const make = (delegate) => FaceDetector.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: MODEL, delegate },
+    runningMode: "VIDEO",
+    minDetectionConfidence: 0.5,
+  });
+  try { detector = await make("GPU"); } catch { detector = await make("CPU"); }
+
+  statusEl.textContent = "웹캠 권한을 허용해 주세요…";
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 960, height: 540, facingMode: "user" }, audio: false });
+  video.srcObject = stream;
+  await video.play();
+  W = canvas.width = video.videoWidth || 960;
+  H = canvas.height = video.videoHeight || 540;
+  ready = true;
+  statusEl.textContent = "";
+  requestAnimationFrame(loop);
+}
+
+// ====== 게임 흐름 ======
+function startGame() {
+  Object.assign(game, { score: 0, lives: CFG.lives, round: 0, phase: "rest", t: 0, cells: [], hit: false, flash: 0 });
+  state = "playing";
+  overlay.classList.add("hidden");
+  updateHud();
+}
+
+function levelCells() {
+  return Math.min(CFG.startCells + Math.floor(game.round / CFG.roundsPerLevel), CFG.maxCells);
+}
+function warnTime() {
+  return Math.max(CFG.warnMin, CFG.warnStart - CFG.warnStep * game.round);
+}
+function pickCells(n) {
+  const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  for (let i = pool.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, n);
+}
+
+function faceCell() {
+  const col = Math.min(2, Math.max(0, Math.floor(face.x / (W / 3))));
+  const row = Math.min(2, Math.max(0, Math.floor(face.y / (H / 3))));
+  return row * 3 + col;
+}
+
+function update(dt) {
+  game.flash = Math.max(0, game.flash - dt);
+  if (state !== "playing" || !face.seen) return; // 얼굴이 없으면 시간 정지
+
+  game.t += dt;
+
+  if (game.phase === "rest" && game.t >= CFG.restTime) {
+    game.phase = "warn"; game.t = 0; game.hit = false;
+    game.cells = pickCells(levelCells());
+  } else if (game.phase === "warn" && game.t >= warnTime()) {
+    game.phase = "danger"; game.t = 0;
+  } else if (game.phase === "danger") {
+    if (!game.hit && game.cells.includes(faceCell())) {
+      game.hit = true; game.lives--; game.flash = 0.4;
+      updateHud();
+      if (game.lives <= 0) return endGame();
+    }
+    if (game.t >= CFG.dangerTime) {
+      if (!game.hit) { game.score++; updateHud(); }
+      game.round++;
+      game.phase = "rest"; game.t = 0; game.cells = [];
+    }
+  }
+}
+
+function endGame() {
+  state = "over";
+  if (game.score > best) { best = game.score; localStorage.setItem("headDodgeBest", best); }
+  updateHud();
+  $("title").textContent = "게임 오버";
+  $("desc").textContent = `${game.score}라운드를 버텼어요. 최고 기록은 ${best}라운드입니다.`;
+  startBtn.textContent = "다시 하기";
+  startBtn.disabled = false;
+  overlay.classList.remove("hidden");
+}
+
+function updateHud() {
+  $("score").textContent = game.score;
+  $("lives").textContent = "♥".repeat(Math.max(0, game.lives));
+  $("best").textContent = "최고 " + best;
+}
+
+// ====== 얼굴 인식 ======
+let lastVideoTime = -1;
+function detect(dt) {
+  if (video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const res = detector.detectForVideo(video, performance.now());
+    const d = res.detections && res.detections[0];
+    if (d && d.boundingBox) {
+      const b = d.boundingBox;
+      const cx = W - (b.originX + b.width / 2);   // 거울 모드라 좌우 반전
+      const cy = b.originY + b.height / 2;
+      if (face.seen) { face.x += (cx - face.x) * 0.5; face.y += (cy - face.y) * 0.5; }
+      else { face.x = cx; face.y = cy; }
+      face.seen = true; face.lostFor = 0; face.box = { w: b.width, h: b.height };
+      return;
+    }
+  }
+  if (!face.seen) return;
+  face.lostFor += dt;
+  if (face.lostFor > CFG.faceLostLimit && lastVideoTime >= 0) {
+    // 한 프레임 놓친 것이 아니라 실제로 사라졌을 때만 해제
+    const stillMissing = true;
+    if (stillMissing) face.seen = false;
+  }
+}
+
+// ====== 그리기 ======
+function draw() {
+  ctx.save();
+  ctx.translate(W, 0); ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, W, H);
+  ctx.restore();
+
+  ctx.fillStyle = "rgba(13, 27, 33, 0.25)";
+  ctx.fillRect(0, 0, W, H);
+
+  const cw = W / 3, ch = H / 3;
+  const pulse = (Math.sin(performance.now() / 70) + 1) / 2;
+
+  for (const i of game.cells) {
+    const x = (i % 3) * cw, y = Math.floor(i / 3) * ch;
+    if (game.phase === "warn") {
+      ctx.fillStyle = `rgba(255, 59, 48, ${0.12 + pulse * 0.25})`;
+      ctx.fillRect(x, y, cw, ch);
+      ctx.strokeStyle = "rgba(255, 59, 48, 0.9)";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x + 2, y + 2, cw - 4, ch - 4);
+    } else if (game.phase === "danger") {
+      ctx.fillStyle = "rgba(255, 59, 48, 0.78)";
+      ctx.fillRect(x, y, cw, ch);
+    }
+  }
+
+  // 격자선
+  ctx.strokeStyle = "rgba(238, 243, 241, 0.55)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 1; i < 3; i++) {
+    ctx.moveTo(cw * i, 0); ctx.lineTo(cw * i, H);
+    ctx.moveTo(0, ch * i); ctx.lineTo(W, ch * i);
+  }
+  ctx.stroke();
+
+  // 내가 있는 칸 + 얼굴 중심점
+  if (face.seen) {
+    const c = faceCell();
+    ctx.strokeStyle = "#ffd166";
+    ctx.lineWidth = 5;
+    ctx.strokeRect((c % 3) * cw + 3, Math.floor(c / 3) * ch + 3, cw - 6, ch - 6);
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(face.x, face.y, 9, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (game.flash > 0) {
+    ctx.fillStyle = `rgba(255, 59, 48, ${game.flash})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (state === "playing" && !face.seen) {
+    ctx.fillStyle = "rgba(13, 27, 33, 0.7)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#eef3f1";
+    ctx.font = "700 36px 'Noto Sans KR', 'Malgun Gothic', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("얼굴이 보이지 않아요. 화면 안으로 들어와 주세요", W / 2, H / 2);
+  }
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  detect(dt);
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ====== 시작 버튼 ======
+startBtn.addEventListener("click", async () => {
+  startBtn.disabled = true;
+  try {
+    if (!ready) await init();
+    startBtn.disabled = false;
+    startGame();
+  } catch (err) {
+    console.error(err);
+    startBtn.disabled = false;
+    statusEl.textContent = "시작하지 못했어요: 웹캠 권한과 인터넷 연결을 확인해 주세요. (" + (err.message || err.name) + ")";
+  }
+});
+</script>
+</body>
+</html>
